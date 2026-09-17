@@ -8,7 +8,6 @@ from rag.document_processor import load_and_split_pdf, get_document_stats
 from rag.embeddings import create_vectorstore, load_vectorstore, get_collection_name, collection_exists
 from rag.chain import (
     build_rag_chain, ask_with_timing, get_sources,
-    AVAILABLE_LLM_MODELS, AVAILABLE_EMBED_MODELS,
     DEFAULT_LLM_MODEL, DEFAULT_EMBED_MODEL,
 )
 
@@ -345,15 +344,9 @@ LLM_DISPLAY = {
     "phi3":      ("Phi-3 Mini", "Microsoft · 3.8B"),
     "qwen2.5":   ("Qwen 2.5",  "Multilingual · 7B"),
 }
-EMBED_DISPLAY = {
-    "nomic-embed-text":  ("Balanced",   "Best for most documents"),
-    "mxbai-embed-large": ("Thorough",   "Higher precision, slower"),
-    "all-minilm":        ("Fast",       "Quickest search, lighter"),
-}
 
-# Build option lists
-LLM_OPTIONS   = {v[0]: k for k, v in LLM_DISPLAY.items()}   # Display name → model id
-EMBED_OPTIONS = {v[0]: k for k, v in EMBED_DISPLAY.items()}  # Display name → model id
+# Build LLM option list: Display name → model id
+LLM_OPTIONS = {v[0]: k for k, v in LLM_DISPLAY.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -395,24 +388,13 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # ── Search precision (embedding model) ───────────────────────────────────
-    st.markdown('<div class="section-label">Search Precision</div>', unsafe_allow_html=True)
-    embed_choice = st.radio(
-        "Search mode",
-        options=list(EMBED_OPTIONS.keys()),
-        index=0,
-        label_visibility="collapsed",
-        help="Controls how the document is indexed. 'Balanced' works great for most cases.",
-    )
-    selected_embed_model = EMBED_OPTIONS[embed_choice]
-    embed_hint = EMBED_DISPLAY[selected_embed_model][1]
-    st.caption(f"↳ {embed_hint}")
-
     # ── Process button ────────────────────────────────────────────────────────
+    # Embedding model is fixed to nomic-embed-text (best default, no config needed)
+    selected_embed_model = DEFAULT_EMBED_MODEL
+
     if uploaded_file:
         is_new = (
             st.session_state.current_doc != uploaded_file.name
-            or st.session_state.selected_embed_model != selected_embed_model
         )
         if is_new:
             if st.button("Analyze Document →", type="primary", use_container_width=True):
