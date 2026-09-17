@@ -228,6 +228,54 @@ st.markdown("""
         margin-left: 4px;
     }
 
+    /* ── Typing indicator ── */
+    .typing-wrap {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 12px 0;
+    }
+    .typing-avatar {
+        width: 28px;
+        height: 28px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    .typing-bubble {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px 18px 18px 18px;
+        padding: 14px 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .typing-label {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-right: 4px;
+    }
+    .dot {
+        width: 7px;
+        height: 7px;
+        background: #6366f1;
+        border-radius: 50%;
+        animation: bounce 1.2s infinite ease-in-out;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+        0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+        40%            { transform: scale(1.1); opacity: 1;   }
+    }
+
     /* ── Compare column header ── */
     .compare-col-head {
         background: #f3f4f6;
@@ -544,6 +592,22 @@ def render_sources(sources):
     st.markdown(f'<div style="margin-top:8px">{pills}</div>', unsafe_allow_html=True)
 
 
+# ── Helper: typing indicator ─────────────────────────────────────────────────
+def show_typing_indicator(placeholder, label: str = ""):
+    """Show animated 3-dot typing bubble in a st.empty() placeholder."""
+    placeholder.markdown(f"""
+    <div class="typing-wrap">
+        <div class="typing-avatar">✦</div>
+        <div class="typing-bubble">
+            <span class="typing-label">{label}</span>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 # ── Helper: render one AI response block ────────────────────────────────────
 def render_ai_response(model_id, answer, elapsed, sources, faster=False):
     label = LLM_DISPLAY.get(model_id, (model_id,))[0]
@@ -631,40 +695,50 @@ else:
             # ── Single model ─────────────────────────────────────────────────
             model_id    = models[0]
             model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
-            with st.spinner(f"{model_label} is thinking…"):
-                try:
-                    chain  = build_rag_chain(vs, model_id)
-                    result = ask_with_timing(chain, question)
-                    render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
-                    st.session_state.chat_history.append({
-                        "role": "assistant",
-                        "responses": [{
-                            "model_id": model_id,
-                            "answer":   result["answer"],
-                            "elapsed":  result["elapsed_seconds"],
-                            "sources":  sources,
-                        }],
-                    })
-                    # Auto-save conversation to disk
-                    st.session_state.session_id = save_session(
-                        st.session_state.current_doc,
-                        st.session_state.chat_history,
-                        st.session_state.session_id,
-                    )
-                except Exception as e:
-                    st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
+
+            # Show typing indicator while model generates
+            typing_placeholder = st.empty()
+            show_typing_indicator(typing_placeholder, model_label)
+
+            try:
+                chain  = build_rag_chain(vs, model_id)
+                result = ask_with_timing(chain, question)
+
+                # Clear typing indicator, render actual answer
+                typing_placeholder.empty()
+                render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
+
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "responses": [{
+                        "model_id": model_id,
+                        "answer":   result["answer"],
+                        "elapsed":  result["elapsed_seconds"],
+                        "sources":  sources,
+                    }],
+                })
+                # Auto-save conversation to disk
+                st.session_state.session_id = save_session(
+                    st.session_state.current_doc,
+                    st.session_state.chat_history,
+                    st.session_state.session_id,
+                )
+            except Exception as e:
+                typing_placeholder.empty()
+                st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
 
         else:
             # ── Side-by-side comparison ───────────────────────────────────────
-            # Step 1: Collect both results first (sequential, under one spinner)
-            results = []
+            # Step 1: Collect both results first (sequential, with typing indicator)
+            results      = []
             model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
-            status_text  = st.empty()
+            typing_ph    = st.empty()
 
             for i, model_id in enumerate(models):
                 label = model_labels[i]
-                status_text.markdown(
-                    f"⏳ Running **{label}** ({i+1} of {len(models)})…"
+                show_typing_indicator(
+                    typing_ph,
+                    f"{label}  ({i+1} of {len(models)})"
                 )
                 try:
                     chain  = build_rag_chain(vs, model_id)
@@ -683,7 +757,7 @@ else:
                         "sources":  [],
                     })
 
-            status_text.empty()  # Clear the status line
+            typing_ph.empty()  # Clear the typing indicator
 
             # Step 2: Mark the faster model
             if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
