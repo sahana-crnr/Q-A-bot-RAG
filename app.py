@@ -605,36 +605,41 @@ else:
 
         else:
             # ── Side-by-side comparison ───────────────────────────────────────
-            col1, col2 = st.columns(2)
-            results    = []
+            # Step 1: Collect both results first (sequential, under one spinner)
+            results = []
+            model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
+            status_text  = st.empty()
 
-            for col, model_id in zip([col1, col2], models):
-                model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
-                with col:
-                    with st.spinner(f"{model_label}…"):
-                        try:
-                            chain  = build_rag_chain(vs, model_id)
-                            result = ask_with_timing(chain, question)
-                            results.append({
-                                "model_id": model_id,
-                                "answer":   result["answer"],
-                                "elapsed":  result["elapsed_seconds"],
-                                "sources":  sources,
-                            })
-                        except Exception as e:
-                            results.append({
-                                "model_id": model_id,
-                                "answer":   f"Something went wrong: {e}",
-                                "elapsed":  0,
-                                "sources":  [],
-                            })
+            for i, model_id in enumerate(models):
+                label = model_labels[i]
+                status_text.markdown(
+                    f"⏳ Running **{label}** ({i+1} of {len(models)})…"
+                )
+                try:
+                    chain  = build_rag_chain(vs, model_id)
+                    result = ask_with_timing(chain, question)
+                    results.append({
+                        "model_id": model_id,
+                        "answer":   result["answer"],
+                        "elapsed":  result["elapsed_seconds"],
+                        "sources":  sources,
+                    })
+                except Exception as e:
+                    results.append({
+                        "model_id": model_id,
+                        "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
+                        "elapsed":  0,
+                        "sources":  [],
+                    })
 
-            # Mark faster model
+            status_text.empty()  # Clear the status line
+
+            # Step 2: Mark the faster model
             if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
                 idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
                 results[idx]["is_faster"] = True
 
-            # Render comparison
+            # Step 3: Render both results side by side cleanly
             col1, col2 = st.columns(2)
             for col, r in zip([col1, col2], results):
                 with col:
@@ -643,6 +648,7 @@ else:
                         r.get("sources", []), faster=r.get("is_faster", False)
                     )
 
+            # Save to chat history
             st.session_state.chat_history.append({
                 "role": "assistant",
                 "responses": results,
