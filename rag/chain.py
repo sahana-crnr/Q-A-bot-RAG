@@ -63,10 +63,11 @@ def format_docs(docs):
     """Format retrieved documents into a single context string."""
     formatted = []
     for i, doc in enumerate(docs, 1):
-        page = doc.metadata.get("page", "?")
-        # Pages are 0-indexed in PyPDFLoader, show as 1-indexed to users
-        page_display = page + 1 if isinstance(page, int) else page
-        formatted.append(f"[Chunk {i} | Page {page_display}]\n{doc.page_content}")
+        location = doc.metadata.get("location")
+        if not location:
+            page = doc.metadata.get("page", "?")
+            location = f"Page {page + 1}" if isinstance(page, int) else f"Page {page}"
+        formatted.append(f"[Chunk {i} | {location}]\n{doc.page_content}")
     return "\n\n---\n\n".join(formatted)
 
 
@@ -117,20 +118,25 @@ def get_sources(vectorstore: Chroma, query: str) -> list:
     Retrieve source chunks for a query (used to display citations).
 
     Returns:
-        List of dicts with page number and content snippet.
+        List of dicts with location, page number, and content snippet.
     """
     retriever = vectorstore.as_retriever(search_kwargs={"k": TOP_K})
     docs = retriever.invoke(query)
     sources = []
-    seen_pages = set()
+    seen_locations = set()
     for doc in docs:
-        page = doc.metadata.get("page", "?")
-        page_display = page + 1 if isinstance(page, int) else page
-        if page_display not in seen_pages:
-            seen_pages.add(page_display)
+        location = doc.metadata.get("location")
+        page = doc.metadata.get("page", 1)
+        if not location:
+            page_display = page + 1 if isinstance(page, int) else page
+            location = f"Page {page_display}"
+
+        if location not in seen_locations:
+            seen_locations.add(location)
             sources.append({
-                "page": page_display,
-                "snippet": doc.page_content[:150].strip() + "...",
+                "page": page,
+                "location": location,
+                "snippet": doc.page_content[:160].strip() + "...",
                 "filename": doc.metadata.get("source_filename", "document"),
             })
     return sources

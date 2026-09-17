@@ -5,7 +5,12 @@ Clean, professional UI for asking questions about uploaded documents.
 
 import os
 import streamlit as st
-from rag.document_processor import load_and_split_pdf, get_document_stats
+from rag.document_processor import (
+    load_and_split_document,
+    load_and_split_pdf,
+    get_document_stats,
+    SUPPORTED_EXTENSIONS,
+)
 from rag.embeddings import create_vectorstore, load_vectorstore, get_collection_name, collection_exists
 from rag.chain import (
     build_rag_chain, ask_with_timing, get_sources,
@@ -434,10 +439,12 @@ with st.sidebar:
     # ── Upload ───────────────────────────────────────────────────────────────
     st.markdown('<div class="section-label">Your Document</div>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader(
-        "Drop a PDF here",
-        type=["pdf"],
+        "Drop a file here",
+        type=SUPPORTED_EXTENSIONS,
+        help="Supported formats: PDF, Word (.docx), Excel (.xlsx, .xls), CSV, Text (.txt, .md), JSON",
         label_visibility="collapsed",
     )
+    st.caption("Supports **PDF, Word, Excel, CSV, Text, JSON**")
 
     # ── Process button ────────────────────────────────────────────────────────
     # Embedding model is fixed to nomic-embed-text (best default, no config needed)
@@ -450,8 +457,8 @@ with st.sidebar:
         if is_new:
             if st.button("Analyze Document →", type="primary", use_container_width=True):
                 collection_name = get_collection_name(uploaded_file.name, selected_embed_model)
-                with st.spinner("Reading document…"):
-                    chunks = load_and_split_pdf(uploaded_file)
+                with st.spinner("Reading & parsing document…"):
+                    chunks = load_and_split_document(uploaded_file)
                     stats  = get_document_stats(chunks)
 
                 if collection_exists(collection_name):
@@ -471,10 +478,23 @@ with st.sidebar:
     # ── Document info card ────────────────────────────────────────────────────
     if st.session_state.current_doc:
         s = st.session_state.doc_stats or {}
+        ext = os.path.splitext(st.session_state.current_doc)[1].lower()
+        icon = {
+            ".pdf": "📕",
+            ".docx": "📘",
+            ".txt": "📄",
+            ".md": "📝",
+            ".csv": "📊",
+            ".xlsx": "📈",
+            ".xls": "📈",
+            ".json": "🗂️",
+        }.get(ext, "📄")
+        unit_label = s.get("unit_label", "Sections")
+        unit_count = s.get("total_units", s.get("total_pages", "–"))
         st.markdown(f"""
         <div class="doc-card">
-            <div class="doc-card-name">📄 {st.session_state.current_doc}</div>
-            <div class="doc-card-meta">{s.get('total_pages','–')} pages · {s.get('total_chunks','–')} sections · {s.get('total_characters',0):,} characters</div>
+            <div class="doc-card-name">{icon} {st.session_state.current_doc}</div>
+            <div class="doc-card-meta">{unit_count} {unit_label} · {s.get('total_chunks', '–')} chunks · {s.get('total_characters', 0):,} characters</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -546,13 +566,24 @@ with st.sidebar:
 
             # Highlight active session
             border = "2px solid #6366f1" if is_active else "1px solid #e5e7eb"
+            ext = os.path.splitext(s["document_name"])[1].lower()
+            icon = {
+                ".pdf": "📕",
+                ".docx": "📘",
+                ".txt": "📄",
+                ".md": "📝",
+                ".csv": "📊",
+                ".xlsx": "📈",
+                ".xls": "📈",
+                ".json": "🗂️",
+            }.get(ext, "📄")
             st.markdown(f"""
             <div style="background:{'#f5f3ff' if is_active else '#f9fafb'};
                         border:{border}; border-radius:8px;
                         padding:8px 10px; margin-bottom:6px;">
                 <div style="font-weight:600;font-size:0.82rem;color:#111827;
                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                    📄 {doc_short}
+                    {icon} {doc_short}
                 </div>
                 <div style="font-size:0.72rem;color:#9ca3af;margin-top:2px">
                     {time_label} · {msg_count} question{"s" if msg_count != 1 else ""}
@@ -602,11 +633,11 @@ with st.sidebar:
 def render_sources(sources):
     if not sources:
         return
-    pills = "".join(
-        f'<span class="source-pill">📄 Page {s["page"]}</span>'
-        for s in sources
-    )
-    st.markdown(f'<div style="margin-top:8px">{pills}</div>', unsafe_allow_html=True)
+    pills = []
+    for s in sources:
+        loc = s.get("location") or f"Page {s.get('page', 1)}"
+        pills.append(f'<span class="source-pill">📌 {loc}</span>')
+    st.markdown(f'<div style="margin-top:8px">{"".join(pills)}</div>', unsafe_allow_html=True)
 
 
 # ── Helper: typing indicator ─────────────────────────────────────────────────
@@ -645,28 +676,28 @@ if st.session_state.vectorstore is None:
     st.markdown("""
     <div class="welcome-card">
         <div class="welcome-icon">✦</div>
-        <div class="welcome-title">Ask anything about your document</div>
+        <div class="welcome-title">Ask anything across any document</div>
         <div class="welcome-sub">
-            Upload a PDF on the left, then ask questions in plain English.
-            Get precise answers with exact page references.
+            Upload any <b>PDF, Word (.docx), Excel, CSV, Text, or JSON</b> file on the left.
+            Ask questions in plain English and get grounded answers with exact source citations.
         </div>
         <div class="step-list">
-            <div class="step-item"><span class="step-num">1</span> Upload a PDF document</div>
+            <div class="step-item"><span class="step-num">1</span> Upload document or dataset</div>
             <div class="step-item"><span class="step-num">2</span> Click "Analyze Document"</div>
-            <div class="step-item"><span class="step-num">3</span> Ask questions naturally</div>
+            <div class="step-item"><span class="step-num">3</span> Ask questions & compare models</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("**You can ask things like…**")
+    st.markdown("**Test across different types of data & domains:**")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.info('"What are the return policy details?"')
+        st.info('📄 **Formal SOW / Contracts:**\n*"What are the project deliverables & payment milestones?"*')
     with c2:
-        st.info('"Summarize the key findings on page 5."')
+        st.info('📊 **Spreadsheets / CSV Catalogs:**\n*"Which shoe model costs less than $100 and is in stock?"*')
     with c3:
-        st.info('"What vegetarian options are available?"')
+        st.info('🍽️ **Menus & Policies:**\n*"What vegan dishes are listed, and what is the return policy?"*')
 
 else:
     # ── Render chat history ──────────────────────────────────────────────────

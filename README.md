@@ -1,80 +1,70 @@
-# 📚 RAG Q&A Bot — Multi-Model Comparison
+# 📚 Clarity — Document Intelligence & Multi-Model RAG
 
-A fully **local, free, no-API-key** RAG application. Upload any PDF, pick open-source models, and compare answers **side-by-side**.
+A fully **local, privacy-first, zero-API-key** RAG system. Upload documents or datasets across **multiple file formats and data types**, query them in natural English, and compare open-source AI models **side-by-side**.
 
 **Stack:** Ollama + ChromaDB + LangChain + Streamlit
 
 ---
 
-## 🤖 Supported Open-Source Models
+## 📁 Supported File Formats & Data Types
 
-### LLM Models (for answer generation)
-| Model | Size | Best For |
-|---|---|---|
-| `llama3.2` | 3B | Fast, great all-rounder |
-| `mistral` | 7B | Strong document Q&A reasoning |
-| `gemma2` | 9B | Excellent instruction following (Google) |
-| `phi3` | 3.8B | Tiny but surprisingly capable (Microsoft) |
-| `qwen2.5` | 7B | Strong multilingual support (Alibaba) |
-
-### Embedding Models (for vector search)
-| Model | Notes |
-|---|---|
-| `nomic-embed-text` | Best speed/quality balance — recommended |
-| `mxbai-embed-large` | Higher accuracy, slightly slower |
-| `all-minilm` | Fastest & smallest |
+| Format | Extension | Data Type | Parsing Strategy | Source Citations |
+|---|---|---|---|---|
+| **PDF** | `.pdf` | Unstructured / Reports / Contracts | PyPDFLoader with text chunking | `Page X` |
+| **Word** | `.docx` | Formatted specs / SOWs / Tables | Paragraph & Markdown table extraction | `Section X` |
+| **Excel** | `.xlsx`, `.xls` | Tabular / Multi-sheet spreadsheets | Sheet-wise record serialization | `Sheet 'Name', Rows X-Y` |
+| **CSV** | `.csv` | Tabular datasets / Catalogs | Header-preserved record rows | `Rows X-Y` |
+| **Text** | `.txt`, `.md` | Documentation / Logs / Notes | Recursive character splitting | `Section X` |
+| **JSON** | `.json` | Structured records / API data | Object-level record batching | `Items X-Y` |
 
 ---
 
-## 🚀 Setup (3 steps)
+## 🤖 Supported Open-Source Models
+
+| Model | Size | Best For |
+|---|---|---|
+| `llama3.2` | 3B | **Fastest response** — direct factual extraction |
+| `mistral` | 7B | **Best accuracy** — polished, comprehensive answers |
+| `gemma2` | 9B | High instruction following (Google) |
+| `phi3` | 3.8B | Compact, efficient for low-spec PCs (Microsoft) |
+| `qwen2.5` | 7B | Strong multilingual & code understanding (Alibaba) |
+
+**Embedding Model:** `nomic-embed-text` (8192-token context window, high-density vector representation).
+
+---
+
+## 🚀 Setup & Run (3 Steps)
 
 ### Step 1: Install Ollama
-Download from **https://ollama.ai** (Windows installer)
+Download and run the installer from **https://ollama.ai**
 
-### Step 2: Pull models
+### Step 2: Pull Models
 ```bash
-# Required (default)
+# Required
 ollama pull llama3.2
 ollama pull nomic-embed-text
 
-# Optional — pull more to compare
+# Optional (for comparison)
 ollama pull mistral
-ollama pull gemma2
 ollama pull phi3
-ollama pull qwen2.5
-ollama pull mxbai-embed-large
-ollama pull all-minilm
 ```
 
-### Step 3: Install dependencies & run
+### Step 3: Install Dependencies & Launch
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-Opens at **http://localhost:8501**
+App opens at **http://localhost:8501**
 
 ---
 
-## 🎯 How to Use
+## 🎯 Key Features
 
-### Single Model Mode
-1. Upload PDF → Process → Ask questions → Get answers with source citations
-
-### Comparison Mode ⚡
-1. Toggle **"Side-by-side comparison mode"** in the sidebar
-2. Select **2 LLM models**
-3. Ask a question → Both models answer simultaneously
-4. See which is **faster** (🏆) and compare answer quality
-
----
-
-##  What Gets Compared
-
-| Metric | How to observe |
-|---|---|
-| **Answer quality** | Read both responses side by side |
-| **Speed** | Response time shown in seconds (⏱️), faster model marked 🏆 |
-| **Embedding quality** | Re-process same PDF with different embedding model, ask same question |
+1. **Multi-Format Support:** Drag and drop PDFs, Word files, Excel sheets, CSV spreadsheets, or JSON files.
+2. **Side-by-Side Model Comparison:** Compare two LLMs answering the same question simultaneously with latency timers (⏱️) and speed badges (🏆).
+3. **Exact Source Attribution:** Every answer provides clickable source citations with exact page numbers, row ranges, or section numbers.
+4. **Persistent Chat Sessions:** Auto-saves conversations to `chat_history/` as JSON; reload or delete anytime from the sidebar.
+5. **100% Offline & Private:** Zero external API calls, zero tracking, all data stays on your local machine.
 
 ---
 
@@ -82,17 +72,14 @@ Opens at **http://localhost:8501**
 
 ```
 Q-A-bot-RAG/
-├── app.py                    # Streamlit UI with comparison mode
+├── app.py                    # Streamlit UI with comparison & history
 ├── rag/
-│   ├── document_processor.py # PDF loading + chunking
-│   ├── embeddings.py         # ChromaDB + dynamic embedding model
-│   └── chain.py              # RAG chain + model list + timing
-├── chroma_db/                # Persisted embeddings (auto-created)
-├── requirements.txt
+│   ├── document_processor.py # Multi-format parser (PDF, DOCX, CSV, Excel, TXT, JSON)
+│   ├── embeddings.py         # ChromaDB vector store + nomic-embed-text
+│   ├── chain.py              # Dynamic LCEL RAG pipeline & citations
+│   └── history.py            # Local JSON chat session persistence
+├── chroma_db/                # Persisted vector database (local only)
+├── chat_history/             # Saved chat sessions (local only)
+├── requirements.txt          # Python dependencies
 └── README.md
 ```
-
----
-
-## 🔒 Privacy
-Everything runs **100% locally**. No data sent anywhere.
