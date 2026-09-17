@@ -565,8 +565,25 @@ with st.sidebar:
                 if st.button("Load", key=f"load_{sid}", use_container_width=True):
                     data = load_session(sid)
                     if data:
+                        doc_name = data.get("document_name", "")
+                        # Restore chat history
                         st.session_state.chat_history = data["messages"]
                         st.session_state.session_id   = sid
+                        st.session_state.current_doc  = doc_name
+
+                        # Restore vectorstore from ChromaDB if it was indexed before
+                        collection_name = get_collection_name(doc_name, DEFAULT_EMBED_MODEL)
+                        if collection_exists(collection_name):
+                            try:
+                                st.session_state.vectorstore = load_vectorstore(
+                                    collection_name, DEFAULT_EMBED_MODEL
+                                )
+                            except Exception:
+                                st.session_state.vectorstore = None
+                        else:
+                            # Document not indexed on this machine — chat is read-only
+                            st.session_state.vectorstore = None
+
                         st.rerun()
             with btn_col2:
                 if st.button("✕", key=f"del_{sid}", use_container_width=True):
@@ -677,45 +694,114 @@ else:
 
     # ── Chat input ───────────────────────────────────────────────────────────
     models = st.session_state.selected_llm_models
-    question = st.chat_input("Ask a question about your document…")
 
-    if question:
-        # Show user message
-        st.markdown(f"""
-        <div class="chat-user-wrap">
-            <div class="chat-user-bubble">{question}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.session_state.chat_history.append({"role": "user", "content": question})
+    # If loaded from history but document not indexed here, show notice
+    if st.session_state.vectorstore is None and st.session_state.chat_history:
+        st.info(
+            f"📂 You're viewing a past conversation for **{st.session_state.current_doc}**. "
+            "To ask new questions, upload and re-analyze the same PDF from the sidebar."
+        )
+    else:
+        question = st.chat_input("Ask a question about your document…")
 
-        vs      = st.session_state.vectorstore
-        sources = get_sources(vs, question)
+        if question:
+            # Show user message
+            st.markdown(f"""
+            <div class="chat-user-wrap">
+                <div class="chat-user-bubble">{question}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.session_state.chat_history.append({"role": "user", "content": question})
 
-        if not st.session_state.compare_mode or len(models) == 1:
-            # ── Single model ─────────────────────────────────────────────────
-            model_id    = models[0]
-            model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
+            vs      = st.session_state.vectorstore
+            sources = get_sources(vs, question)
 
-            # Show typing indicator while model generates
-            typing_placeholder = st.empty()
-            show_typing_indicator(typing_placeholder, model_label)
+            if not st.session_state.compare_mode or len(models) == 1:
+                # ── Single model ─────────────────────────────────────────────
+                model_id    = models[0]
+                model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
 
-            try:
-                chain  = build_rag_chain(vs, model_id)
-                result = ask_with_timing(chain, question)
+                # Show typing indicator while model generates
+                typing_placeholder = st.empty()
+                show_typing_indicator(typing_placeholder, model_label)
 
-                # Clear typing indicator, render actual answer
-                typing_placeholder.empty()
-                render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
+                try:
+                    chain  = build_rag_chain(vs, model_id)
+                    result = ask_with_timing(chain, question)
 
+                    # Clear typing indicator, render actual answer
+                    typing_placeholder.empty()
+                    render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
+
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "responses": [{
+                            "model_id": model_id,
+                            "answer":   result["answer"],
+                            "elapsed":  result["elapsed_seconds"],
+                            "sources":  sources,
+                        }],
+                    })
+                    # Auto-save conversation to disk
+                    st.session_state.session_id = save_session(
+                        st.session_state.current_doc,
+                        st.session_state.chat_history,
+                        st.session_state.session_id,
+                    )
+                except Exception as e:
+                    typing_placeholder.empty()
+                    st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
+
+            else:
+                # ── Side-by-side comparison ───────────────────────────────────
+                # Step 1: Collect both results (sequential, with typing indicator)
+                results      = []
+                model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
+                typing_ph    = st.empty()
+
+                for i, model_id in enumerate(models):
+                    label = model_labels[i]
+                    show_typing_indicator(
+                        typing_ph,
+                        f"{label}  ({i+1} of {len(models)})"
+                    )
+                    try:
+                        chain  = build_rag_chain(vs, model_id)
+                        result = ask_with_timing(chain, question)
+                        results.append({
+                            "model_id": model_id,
+                            "answer":   result["answer"],
+                            "elapsed":  result["elapsed_seconds"],
+                            "sources":  sources,
+                        })
+                    except Exception as e:
+                        results.append({
+                            "model_id": model_id,
+                            "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
+                            "elapsed":  0,
+                            "sources":  [],
+                        })
+
+                typing_ph.empty()  # Clear the typing indicator
+
+                # Step 2: Mark the faster model
+                if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
+                    idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
+                    results[idx]["is_faster"] = True
+
+                # Step 3: Render both results side by side cleanly
+                col1, col2 = st.columns(2)
+                for col, r in zip([col1, col2], results):
+                    with col:
+                        render_ai_response(
+                            r["model_id"], r["answer"], r["elapsed"],
+                            r.get("sources", []), faster=r.get("is_faster", False)
+                        )
+
+                # Save to chat history
                 st.session_state.chat_history.append({
                     "role": "assistant",
-                    "responses": [{
-                        "model_id": model_id,
-                        "answer":   result["answer"],
-                        "elapsed":  result["elapsed_seconds"],
-                        "sources":  sources,
-                    }],
+                    "responses": results,
                 })
                 # Auto-save conversation to disk
                 st.session_state.session_id = save_session(
@@ -723,64 +809,3 @@ else:
                     st.session_state.chat_history,
                     st.session_state.session_id,
                 )
-            except Exception as e:
-                typing_placeholder.empty()
-                st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
-
-        else:
-            # ── Side-by-side comparison ───────────────────────────────────────
-            # Step 1: Collect both results first (sequential, with typing indicator)
-            results      = []
-            model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
-            typing_ph    = st.empty()
-
-            for i, model_id in enumerate(models):
-                label = model_labels[i]
-                show_typing_indicator(
-                    typing_ph,
-                    f"{label}  ({i+1} of {len(models)})"
-                )
-                try:
-                    chain  = build_rag_chain(vs, model_id)
-                    result = ask_with_timing(chain, question)
-                    results.append({
-                        "model_id": model_id,
-                        "answer":   result["answer"],
-                        "elapsed":  result["elapsed_seconds"],
-                        "sources":  sources,
-                    })
-                except Exception as e:
-                    results.append({
-                        "model_id": model_id,
-                        "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
-                        "elapsed":  0,
-                        "sources":  [],
-                    })
-
-            typing_ph.empty()  # Clear the typing indicator
-
-            # Step 2: Mark the faster model
-            if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
-                idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
-                results[idx]["is_faster"] = True
-
-            # Step 3: Render both results side by side cleanly
-            col1, col2 = st.columns(2)
-            for col, r in zip([col1, col2], results):
-                with col:
-                    render_ai_response(
-                        r["model_id"], r["answer"], r["elapsed"],
-                        r.get("sources", []), faster=r.get("is_faster", False)
-                    )
-
-            # Save to chat history
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "responses": results,
-            })
-            # Auto-save conversation to disk
-            st.session_state.session_id = save_session(
-                st.session_state.current_doc,
-                st.session_state.chat_history,
-                st.session_state.session_id,
-            )
