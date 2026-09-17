@@ -18,6 +18,19 @@ ENV/
 # ChromaDB — persisted vector store (generated locally, do not commit)
 chroma_db/
 
+# Chat history — personal conversations (generated locally)
+chat_history/
+
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ChromaDB — persisted vector store (generated locally, do not commit)
+chroma_db/
+
 # Uploaded/temp files
 *.pdf
 sample_docs/
@@ -34,3 +47,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+

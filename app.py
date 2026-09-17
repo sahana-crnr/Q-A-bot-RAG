@@ -3,6 +3,7 @@ app.py — Document Intelligence Assistant
 Clean, professional UI for asking questions about uploaded documents.
 """
 
+import os
 import streamlit as st
 from rag.document_processor import load_and_split_pdf, get_document_stats
 from rag.embeddings import create_vectorstore, load_vectorstore, get_collection_name, collection_exists
@@ -10,6 +11,7 @@ from rag.chain import (
     build_rag_chain, ask_with_timing, get_sources,
     DEFAULT_LLM_MODEL, DEFAULT_EMBED_MODEL,
 )
+from rag.history import save_session, load_session, list_sessions, delete_session, format_saved_at
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -360,6 +362,7 @@ for key, default in {
     "selected_embed_model": DEFAULT_EMBED_MODEL,
     "selected_llm_models": [DEFAULT_LLM_MODEL],
     "compare_mode": False,
+    "session_id": None,       # Tracks the current save file
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -458,12 +461,72 @@ with st.sidebar:
 
     st.session_state.selected_llm_models = selected_llm_models
 
-    # ── Clear ─────────────────────────────────────────────────────────────────
+    # ── Current conversation controls ─────────────────────────────────────────
     if st.session_state.chat_history:
         st.markdown("---")
-        if st.button("Clear conversation", use_container_width=True):
-            st.session_state.chat_history = []
-            st.rerun()
+        col_new, col_clear = st.columns(2)
+        with col_new:
+            if st.button("＋ New", use_container_width=True):
+                # Save current before clearing
+                if st.session_state.current_doc:
+                    save_session(
+                        st.session_state.current_doc,
+                        st.session_state.chat_history,
+                        st.session_state.session_id,
+                    )
+                st.session_state.chat_history = []
+                st.session_state.session_id   = None
+                st.rerun()
+        with col_clear:
+            if st.button("🗑 Clear", use_container_width=True):
+                st.session_state.chat_history = []
+                st.session_state.session_id   = None
+                st.rerun()
+
+    # ── Past Conversations ────────────────────────────────────────────────────
+    sessions = list_sessions()
+    if sessions:
+        st.markdown("---")
+        st.markdown('<div class="section-label">Past Conversations</div>', unsafe_allow_html=True)
+
+        for s in sessions[:8]:  # Show max 8 recent sessions
+            sid        = s["session_id"]
+            doc_short  = os.path.splitext(s["document_name"])[0][:22]
+            time_label = format_saved_at(s["saved_at"])
+            msg_count  = s["message_count"]
+            is_active  = sid == st.session_state.session_id
+
+            # Highlight active session
+            border = "2px solid #6366f1" if is_active else "1px solid #e5e7eb"
+            st.markdown(f"""
+            <div style="background:{'#f5f3ff' if is_active else '#f9fafb'};
+                        border:{border}; border-radius:8px;
+                        padding:8px 10px; margin-bottom:6px;">
+                <div style="font-weight:600;font-size:0.82rem;color:#111827;
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    📄 {doc_short}
+                </div>
+                <div style="font-size:0.72rem;color:#9ca3af;margin-top:2px">
+                    {time_label} · {msg_count} question{"s" if msg_count != 1 else ""}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            btn_col1, btn_col2 = st.columns([3, 1])
+            with btn_col1:
+                if st.button("Load", key=f"load_{sid}", use_container_width=True):
+                    data = load_session(sid)
+                    if data:
+                        st.session_state.chat_history = data["messages"]
+                        st.session_state.session_id   = sid
+                        st.rerun()
+            with btn_col2:
+                if st.button("✕", key=f"del_{sid}", use_container_width=True):
+                    delete_session(sid)
+                    if st.session_state.session_id == sid:
+                        st.session_state.chat_history = []
+                        st.session_state.session_id   = None
+                    st.rerun()
 
 
 # ===========================================================================
@@ -582,6 +645,12 @@ else:
                             "sources":  sources,
                         }],
                     })
+                    # Auto-save conversation to disk
+                    st.session_state.session_id = save_session(
+                        st.session_state.current_doc,
+                        st.session_state.chat_history,
+                        st.session_state.session_id,
+                    )
                 except Exception as e:
                     st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
 
@@ -635,3 +704,9 @@ else:
                 "role": "assistant",
                 "responses": results,
             })
+            # Auto-save conversation to disk
+            st.session_state.session_id = save_session(
+                st.session_state.current_doc,
+                st.session_state.chat_history,
+                st.session_state.session_id,
+            )
