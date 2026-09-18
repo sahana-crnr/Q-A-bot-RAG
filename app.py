@@ -677,7 +677,8 @@ def render_ai_response(model_id, answer, elapsed, sources, faster=False):
 
 
 # ── No document loaded → Welcome screen ─────────────────────────────────────
-if st.session_state.vectorstore is None:
+# ── Welcome screen or Chat History ──────────────────────────────────────────
+if st.session_state.vectorstore is None and not st.session_state.chat_history:
     st.markdown("""
     <div class="welcome-card">
         <div class="welcome-icon">✦</div>
@@ -728,165 +729,169 @@ else:
                         )
             st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
-    # ── Chat input & Model Selector Bar ───────────────────────────────────────
-    # If loaded from history but document not indexed here, show notice
     if st.session_state.vectorstore is None and st.session_state.chat_history:
         st.info(
             f"📂 You're viewing a past conversation for **{st.session_state.current_doc}**. "
             "To ask new questions, upload and re-analyze the same document from the sidebar."
         )
-        # ── Model Selector & Input Box (Fixed directly inside bottom input box) ──
-        with st.bottom:
-            llm_display_choices = list(LLM_FORMATTED_NAMES.values())
 
-            st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
-            t_col1, t_col2 = st.columns([3, 1])
+# ── Bottom Fixed Question Box & Model Selector (ALWAYS VISIBLE) ─────────────
+has_doc = st.session_state.vectorstore is not None
 
-            with t_col2:
-                compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
-                st.session_state.compare_mode = compare_mode
+with st.bottom:
+    llm_display_choices = list(LLM_FORMATTED_NAMES.values())
 
-            with t_col1:
-                if compare_mode:
-                    default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
-                    if len(default_labels) < 2:
-                        default_labels = llm_display_choices[:2]
-                    elif len(default_labels) > 2:
-                        default_labels = default_labels[:2]
+    st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
+    t_col1, t_col2 = st.columns([3, 1])
 
-                    selected_labels = st.multiselect(
-                        "Pick 2 models to compare",
-                        options=llm_display_choices,
-                        default=default_labels,
-                        max_selections=2,
-                        label_visibility="collapsed",
-                        placeholder="Choose 2 models to compare side-by-side…",
-                        key="prompt_models_multi",
-                    )
-                    if len(selected_labels) != 2:
-                        st.caption("⚠️ *Select exactly 2 models to compare.*")
-                    st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
-                else:
-                    cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
-                    cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
-                    def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
+    with t_col2:
+        compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
+        st.session_state.compare_mode = compare_mode
 
-                    selected_label = st.selectbox(
-                        "Model",
-                        options=llm_display_choices,
-                        index=def_idx,
-                        label_visibility="collapsed",
-                        key="prompt_model_single",
-                    )
-                    st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
+    with t_col1:
+        if compare_mode:
+            default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
+            if len(default_labels) < 2:
+                default_labels = llm_display_choices[:2]
+            elif len(default_labels) > 2:
+                default_labels = default_labels[:2]
 
-            st.markdown('</div>', unsafe_allow_html=True)
+            selected_labels = st.multiselect(
+                "Pick 2 models to compare",
+                options=llm_display_choices,
+                default=default_labels,
+                max_selections=2,
+                label_visibility="collapsed",
+                placeholder="Choose 2 models to compare side-by-side…",
+                key="prompt_models_multi",
+            )
+            if len(selected_labels) != 2:
+                st.caption("⚠️ *Select exactly 2 models to compare.*")
+            st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
+        else:
+            cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
+            cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
+            def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
 
-            models = st.session_state.selected_llm_models
-            question = st.chat_input("Ask a question about your document…")
+            selected_label = st.selectbox(
+                "Model",
+                options=llm_display_choices,
+                index=def_idx,
+                label_visibility="collapsed",
+                key="prompt_model_single",
+            )
+            st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
 
-        if question:
-            # Show user message
-            st.markdown(f"""
-            <div class="chat-user-wrap">
-                <div class="chat-user-bubble">{question}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.session_state.chat_history.append({"role": "user", "content": question})
+    st.markdown('</div>', unsafe_allow_html=True)
 
-            vs      = st.session_state.vectorstore
-            sources = get_sources(vs, question)
+    models = st.session_state.selected_llm_models
+    question = st.chat_input(
+        "Ask a question about your document…" if has_doc else "Upload a document in the sidebar to start asking questions…",
+        disabled=not has_doc,
+    )
 
-            if not st.session_state.compare_mode or len(models) == 1:
-                # ── Single model ─────────────────────────────────────────────
-                model_id    = models[0]
-                model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
+if question and has_doc:
+    # Show user message
+    st.markdown(f"""
+    <div class="chat-user-wrap">
+        <div class="chat-user-bubble">{question}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.session_state.chat_history.append({"role": "user", "content": question})
 
-                # Show typing indicator while model generates
-                typing_placeholder = st.empty()
-                show_typing_indicator(typing_placeholder, model_label)
+    vs      = st.session_state.vectorstore
+    sources = get_sources(vs, question)
 
-                try:
-                    chain  = build_rag_chain(vs, model_id)
-                    result = ask_with_timing(chain, question)
+    if not st.session_state.compare_mode or len(models) == 1:
+        # ── Single model ─────────────────────────────────────────────
+        model_id    = models[0]
+        model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
 
-                    # Clear typing indicator, render actual answer
-                    typing_placeholder.empty()
-                    render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
+        # Show typing indicator while model generates
+        typing_placeholder = st.empty()
+        show_typing_indicator(typing_placeholder, model_label)
 
-                    st.session_state.chat_history.append({
-                        "role": "assistant",
-                        "responses": [{
-                            "model_id": model_id,
-                            "answer":   result["answer"],
-                            "elapsed":  result["elapsed_seconds"],
-                            "sources":  sources,
-                        }],
-                    })
-                    # Auto-save conversation to disk
-                    st.session_state.session_id = save_session(
-                        st.session_state.current_doc,
-                        st.session_state.chat_history,
-                        st.session_state.session_id,
-                    )
-                except Exception as e:
-                    typing_placeholder.empty()
-                    st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
+        try:
+            chain  = build_rag_chain(vs, model_id)
+            result = ask_with_timing(chain, question)
 
-            else:
-                # ── Side-by-side comparison ───────────────────────────────────
-                # Step 1: Collect both results (sequential, with typing indicator)
-                results      = []
-                model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
-                typing_ph    = st.empty()
+            # Clear typing indicator, render actual answer
+            typing_placeholder.empty()
+            render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
 
-                for i, model_id in enumerate(models):
-                    label = model_labels[i]
-                    show_typing_indicator(
-                        typing_ph,
-                        f"{label}  ({i+1} of {len(models)})"
-                    )
-                    try:
-                        chain  = build_rag_chain(vs, model_id)
-                        result = ask_with_timing(chain, question)
-                        results.append({
-                            "model_id": model_id,
-                            "answer":   result["answer"],
-                            "elapsed":  result["elapsed_seconds"],
-                            "sources":  sources,
-                        })
-                    except Exception as e:
-                        results.append({
-                            "model_id": model_id,
-                            "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
-                            "elapsed":  0,
-                            "sources":  [],
-                        })
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "responses": [{
+                    "model_id": model_id,
+                    "answer":   result["answer"],
+                    "elapsed":  result["elapsed_seconds"],
+                    "sources":  sources,
+                }],
+            })
+            # Auto-save conversation to disk
+            st.session_state.session_id = save_session(
+                st.session_state.current_doc,
+                st.session_state.chat_history,
+                st.session_state.session_id,
+            )
+        except Exception as e:
+            typing_placeholder.empty()
+            st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
 
-                typing_ph.empty()  # Clear the typing indicator
+    else:
+        # ── Side-by-side comparison ───────────────────────────────────
+        # Step 1: Collect both results (sequential, with typing indicator)
+        results      = []
+        model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
+        typing_ph    = st.empty()
 
-                # Step 2: Mark the faster model
-                if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
-                    idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
-                    results[idx]["is_faster"] = True
-
-                # Step 3: Render both results side by side cleanly
-                col1, col2 = st.columns(2)
-                for col, r in zip([col1, col2], results):
-                    with col:
-                        render_ai_response(
-                            r["model_id"], r["answer"], r["elapsed"],
-                            r.get("sources", []), faster=r.get("is_faster", False)
-                        )
-
-                # Save to chat history
-                st.session_state.chat_history.append({
-                    "role": "assistant",
-                    "responses": results,
+        for i, model_id in enumerate(models):
+            label = model_labels[i]
+            show_typing_indicator(
+                typing_ph,
+                f"{label}  ({i+1} of {len(models)})"
+            )
+            try:
+                chain  = build_rag_chain(vs, model_id)
+                result = ask_with_timing(chain, question)
+                results.append({
+                    "model_id": model_id,
+                    "answer":   result["answer"],
+                    "elapsed":  result["elapsed_seconds"],
+                    "sources":  sources,
                 })
-                # Auto-save conversation to disk
-                st.session_state.session_id = save_session(
-                    st.session_state.current_doc,
-                    st.session_state.chat_history,
-                    st.session_state.session_id,
+            except Exception as e:
+                results.append({
+                    "model_id": model_id,
+                    "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
+                    "elapsed":  0,
+                    "sources":  [],
+                })
+
+        typing_ph.empty()  # Clear the typing indicator
+
+        # Step 2: Mark the faster model
+        if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
+            idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
+            results[idx]["is_faster"] = True
+
+        # Step 3: Render both results side by side cleanly
+        col1, col2 = st.columns(2)
+        for col, r in zip([col1, col2], results):
+            with col:
+                render_ai_response(
+                    r["model_id"], r["answer"], r["elapsed"],
+                    r.get("sources", []), faster=r.get("is_faster", False)
                 )
+
+        # Save to chat history
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "responses": results,
+        })
+        # Auto-save conversation to disk
+        st.session_state.session_id = save_session(
+            st.session_state.current_doc,
+            st.session_state.chat_history,
+            st.session_state.session_id,
+        )
