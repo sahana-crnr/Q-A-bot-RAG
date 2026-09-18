@@ -368,10 +368,6 @@ st.markdown("""
     }
 
     /* Streamlit overrides */
-    div[data-testid="stChatInput"] {
-        border-top: 1px solid #e5e7eb;
-        padding-top: 12px;
-    }
     .stButton button {
         border-radius: 8px !important;
         font-weight: 500 !important;
@@ -386,23 +382,34 @@ st.markdown("""
         border-radius: 8px !important;
     }
 
-    /* ── Chat Prompt Model Selector Toolbar ── */
+    /* ── Bottom Fixed Input Area & Integrated Model Selector ── */
+    div[data-testid="stBottom"] {
+        background: linear-gradient(180deg, rgba(249,250,251,0) 0%, #f9fafb 25%) !important;
+        padding-top: 10px !important;
+        padding-bottom: 20px !important;
+    }
     .prompt-toolbar {
         background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 6px 14px 4px 14px;
-        margin-top: 14px;
-        margin-bottom: 2px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        border: 1px solid #d1d5db;
+        border-bottom: 1px dashed #e5e7eb;
+        border-radius: 16px 16px 0 0;
+        padding: 5px 14px 2px 14px;
+        margin-bottom: 0px !important;
+        box-shadow: 0 -2px 6px rgba(0,0,0,0.02);
     }
-    .prompt-toolbar-label {
-        font-size: 0.72rem;
-        font-weight: 600;
-        color: #9ca3af;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 2px;
+    div[data-testid="stChatInput"] {
+        border-top: none !important;
+        padding-top: 0px !important;
+    }
+    div[data-testid="stChatInput"] > div {
+        border-top: none !important;
+        border-top-left-radius: 0px !important;
+        border-top-right-radius: 0px !important;
+        border-color: #d1d5db !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
+    }
+    div[data-testid="stChatInput"] textarea {
+        padding-top: 6px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -728,55 +735,55 @@ else:
             f"📂 You're viewing a past conversation for **{st.session_state.current_doc}**. "
             "To ask new questions, upload and re-analyze the same document from the sidebar."
         )
-    else:
-        # ── Model Selector (Integrated directly with question asking box) ────
-        llm_display_choices = list(LLM_FORMATTED_NAMES.values())
+        # ── Model Selector & Input Box (Fixed directly inside bottom input box) ──
+        with st.bottom:
+            llm_display_choices = list(LLM_FORMATTED_NAMES.values())
 
-        st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
-        t_col1, t_col2 = st.columns([3, 1])
+            st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
+            t_col1, t_col2 = st.columns([3, 1])
 
-        with t_col2:
-            compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
-            st.session_state.compare_mode = compare_mode
+            with t_col2:
+                compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
+                st.session_state.compare_mode = compare_mode
 
-        with t_col1:
-            if compare_mode:
-                default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
-                if len(default_labels) < 2:
-                    default_labels = llm_display_choices[:2]
-                elif len(default_labels) > 2:
-                    default_labels = default_labels[:2]
+            with t_col1:
+                if compare_mode:
+                    default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
+                    if len(default_labels) < 2:
+                        default_labels = llm_display_choices[:2]
+                    elif len(default_labels) > 2:
+                        default_labels = default_labels[:2]
 
-                selected_labels = st.multiselect(
-                    "Pick 2 models to compare",
-                    options=llm_display_choices,
-                    default=default_labels,
-                    max_selections=2,
-                    label_visibility="collapsed",
-                    placeholder="Choose 2 models to compare side-by-side…",
-                    key="prompt_models_multi",
-                )
-                if len(selected_labels) != 2:
-                    st.caption("⚠️ *Select exactly 2 models to compare.*")
-                st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
-            else:
-                cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
-                cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
-                def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
+                    selected_labels = st.multiselect(
+                        "Pick 2 models to compare",
+                        options=llm_display_choices,
+                        default=default_labels,
+                        max_selections=2,
+                        label_visibility="collapsed",
+                        placeholder="Choose 2 models to compare side-by-side…",
+                        key="prompt_models_multi",
+                    )
+                    if len(selected_labels) != 2:
+                        st.caption("⚠️ *Select exactly 2 models to compare.*")
+                    st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
+                else:
+                    cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
+                    cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
+                    def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
 
-                selected_label = st.selectbox(
-                    "Model",
-                    options=llm_display_choices,
-                    index=def_idx,
-                    label_visibility="collapsed",
-                    key="prompt_model_single",
-                )
-                st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
+                    selected_label = st.selectbox(
+                        "Model",
+                        options=llm_display_choices,
+                        index=def_idx,
+                        label_visibility="collapsed",
+                        key="prompt_model_single",
+                    )
+                    st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
 
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        models = st.session_state.selected_llm_models
-        question = st.chat_input("Ask a question about your document…")
+            models = st.session_state.selected_llm_models
+            question = st.chat_input("Ask a question about your document…")
 
         if question:
             # Show user message
