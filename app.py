@@ -382,34 +382,223 @@ st.markdown("""
         border-radius: 8px !important;
     }
 
-    /* ── Bottom Fixed Input Area & Integrated Model Selector ── */
+    /* ── Modern Unified AI Prompt Box & Docked Toolbar (Screenshot Match) ── */
     div[data-testid="stBottom"] {
-        background: linear-gradient(180deg, rgba(249,250,251,0) 0%, #f9fafb 25%) !important;
-        padding-top: 10px !important;
-        padding-bottom: 20px !important;
+        background: linear-gradient(180deg, rgba(249,250,251,0) 0%, rgba(249,250,251,0.92) 25%, #f9fafb 100%) !important;
+        padding-top: 14px !important;
+        padding-bottom: 24px !important;
     }
-    .prompt-toolbar {
-        background: #ffffff;
-        border: 1px solid #d1d5db;
-        border-bottom: 1px dashed #e5e7eb;
-        border-radius: 16px 16px 0 0;
-        padding: 5px 14px 2px 14px;
-        margin-bottom: 0px !important;
-        box-shadow: 0 -2px 6px rgba(0,0,0,0.02);
+    div[data-testid="stBottom"] > div,
+    div[data-testid="stBottom"] [data-testid="stVerticalBlock"] {
+        position: relative !important;
+        max-width: 820px !important;
+        margin: 0 auto !important;
     }
     div[data-testid="stChatInput"] {
-        border-top: none !important;
-        padding-top: 0px !important;
+        position: relative !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        background: transparent !important;
     }
     div[data-testid="stChatInput"] > div {
-        border-top: none !important;
-        border-top-left-radius: 0px !important;
-        border-top-right-radius: 0px !important;
-        border-color: #d1d5db !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
+        background-color: #1e1f20 !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 26px !important;
+        min-height: 106px !important;
+        padding: 14px 58px 46px 18px !important;
+        box-shadow: 0 4px 22px rgba(0, 0, 0, 0.28) !important;
+        position: relative !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }
+    div[data-testid="stChatInput"] > div:focus-within {
+        border-color: #5f6368 !important;
+        box-shadow: 0 4px 28px rgba(0, 0, 0, 0.4) !important;
     }
     div[data-testid="stChatInput"] textarea {
-        padding-top: 6px !important;
+        background: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        color: #f1f3f4 !important;
+        font-size: 1rem !important;
+        line-height: 1.5 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        caret-color: #ffffff !important;
+        resize: none !important;
+    }
+    div[data-testid="stChatInput"] textarea::placeholder {
+        color: #9aa0a6 !important;
+        opacity: 1 !important;
+    }
+
+    /* Circular blue send button */
+    div[data-testid="stChatInput"] button[data-testid="stChatInputSubmitButton"] {
+        position: absolute !important;
+        right: 14px !important;
+        bottom: 12px !important;
+        width: 36px !important;
+        height: 36px !important;
+        border-radius: 50% !important;
+        background: #1a73e8 !important;
+        border: none !important;
+        color: #ffffff !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+        cursor: pointer !important;
+        transition: transform 0.12s ease, background 0.15s ease !important;
+        z-index: 25 !important;
+    }
+    div[data-testid="stChatInput"] button[data-testid="stChatInputSubmitButton"]:hover:not(:disabled) {
+        background: #1557b0 !important;
+        transform: scale(1.05) !important;
+    }
+    div[data-testid="stChatInput"] button[data-testid="stChatInputSubmitButton"]:disabled {
+        background: #2e3134 !important;
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+    }
+    div[data-testid="stChatInput"] button[data-testid="stChatInputSubmitButton"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    /* Docked bottom-left toolbar (+ icon, Model pill, Compare) */
+    .st-key-chat_dock_toolbar {
+        position: absolute !important;
+        bottom: 14px !important;
+        left: 18px !important;
+        z-index: 30 !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        max-width: calc(100% - 75px) !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="column"] {
+        width: auto !important;
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Plus icon */
+    .gemini-plus-btn {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 50% !important;
+        color: #9aa0a6 !important;
+        font-size: 1.25rem !important;
+        font-weight: 300 !important;
+        line-height: 1 !important;
+        cursor: pointer !important;
+        user-select: none !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+    }
+    .gemini-plus-btn:hover {
+        color: #ffffff !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    /* Model Selector Pill */
+    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"] {
+        margin: 0 !important;
+        min-width: 130px !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"] label {
+        display: none !important;
+    }
+    .st-key-chat_dock_toolbar div[data-baseweb="select"] > div {
+        background: #282a2c !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 16px !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        padding: 0 10px !important;
+        box-shadow: none !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+    }
+    .st-key-chat_dock_toolbar div[data-baseweb="select"] > div:hover {
+        background: #323538 !important;
+        border-color: #5f6368 !important;
+    }
+    .st-key-chat_dock_toolbar div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+    .st-key-chat_dock_toolbar div[data-baseweb="select"] span {
+        color: #c4c7c5 !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+    }
+    .st-key-chat_dock_toolbar div[data-baseweb="select"] svg {
+        fill: #9aa0a6 !important;
+        color: #9aa0a6 !important;
+        width: 15px !important;
+        height: 15px !important;
+    }
+
+    /* VS Tag in compare mode */
+    .gemini-vs-tag {
+        color: #80868b !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        padding: 0 2px !important;
+    }
+
+    /* Compare Toggle */
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"] {
+        margin: 0 !important;
+        padding: 0 4px !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"] label {
+        margin: 0 !important;
+        cursor: pointer !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"] [data-testid="stMarkdownContainer"] p {
+        color: #9aa0a6 !important;
+        font-size: 0.78rem !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"]:hover [data-testid="stMarkdownContainer"] p {
+        color: #e3e3e3 !important;
+    }
+
+    /* Dropdown Popover Menu (BaseWeb menu) */
+    div[data-baseweb="popover"] ul[role="listbox"] {
+        background: #1e1f20 !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+        padding: 4px !important;
+    }
+    div[data-baseweb="popover"] li[role="option"] {
+        color: #e3e3e3 !important;
+        font-size: 0.84rem !important;
+        border-radius: 8px !important;
+        padding: 6px 12px !important;
+    }
+    div[data-baseweb="popover"] li[role="option"]:hover,
+    div[data-baseweb="popover"] li[aria-selected="true"] {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -438,6 +627,17 @@ LLM_FORMATTED_NAMES = {
     "gemma2":   "✦ Gemma 2 (9B · Google)",
 }
 LLM_FORMATTED_TO_ID = {v: k for k, v in LLM_FORMATTED_NAMES.items()}
+
+# Clean pill labels matching modern AI input style
+LLM_PILL_NAMES = {
+    "llama3.2": "✦ LLaMA 3.2",
+    "mistral":  "✦ Mistral",
+    "phi3":     "✦ Phi-3 Mini",
+    "qwen2.5":  "✦ Qwen 2.5",
+    "gemma2":   "✦ Gemma 2",
+}
+LLM_PILL_TO_ID = {v: k for k, v in LLM_PILL_NAMES.items()}
+
 
 
 # ---------------------------------------------------------------------------
@@ -739,56 +939,50 @@ else:
 has_doc = st.session_state.vectorstore is not None
 
 with st.bottom:
-    llm_display_choices = list(LLM_FORMATTED_NAMES.values())
-
-    st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
-    t_col1, t_col2 = st.columns([3, 1])
-
-    with t_col2:
-        compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
-        st.session_state.compare_mode = compare_mode
-
-    with t_col1:
-        if compare_mode:
-            default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
-            if len(default_labels) < 2:
-                default_labels = llm_display_choices[:2]
-            elif len(default_labels) > 2:
-                default_labels = default_labels[:2]
-
-            selected_labels = st.multiselect(
-                "Pick 2 models to compare",
-                options=llm_display_choices,
-                default=default_labels,
-                max_selections=2,
-                label_visibility="collapsed",
-                placeholder="Choose 2 models to compare side-by-side…",
-                key="prompt_models_multi",
-            )
-            if len(selected_labels) != 2:
-                st.caption("⚠️ *Select exactly 2 models to compare.*")
-            st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
-        else:
-            cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
-            cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
-            def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
-
-            selected_label = st.selectbox(
-                "Model",
-                options=llm_display_choices,
-                index=def_idx,
-                label_visibility="collapsed",
-                key="prompt_model_single",
-            )
-            st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    models = st.session_state.selected_llm_models
+    # 1. First render the chat input (modern dark pill container)
     question = st.chat_input(
         "Ask a question about your document…" if has_doc else "Upload a document in the sidebar to start asking questions…",
         disabled=not has_doc,
     )
+
+    # 2. Docked bottom-left toolbar (+ icon, Model pill, Compare) matching modern AI input style
+    pill_options = list(LLM_PILL_NAMES.values())
+    with st.container(key="chat_dock_toolbar"):
+        if st.session_state.compare_mode:
+            c_plus, c_m1, c_vs, c_m2, c_tog = st.columns([0.05, 0.4, 0.05, 0.4, 0.3], vertical_alignment="center")
+            with c_plus:
+                st.markdown('<div class="gemini-plus-btn" title="Add / Upload document in sidebar">+</div>', unsafe_allow_html=True)
+            with c_m1:
+                cur_m1 = st.session_state.selected_llm_models[0] if len(st.session_state.selected_llm_models) > 0 else "llama3.2"
+                m1_name = LLM_PILL_NAMES.get(cur_m1, pill_options[0])
+                idx1 = pill_options.index(m1_name) if m1_name in pill_options else 0
+                sel_m1 = st.selectbox("Model A", options=pill_options, index=idx1, label_visibility="collapsed", key="cmp_pill_m1")
+            with c_vs:
+                st.markdown('<span class="gemini-vs-tag">vs</span>', unsafe_allow_html=True)
+            with c_m2:
+                cur_m2 = st.session_state.selected_llm_models[1] if len(st.session_state.selected_llm_models) > 1 else ("mistral" if cur_m1 != "mistral" else "llama3.2")
+                m2_name = LLM_PILL_NAMES.get(cur_m2, pill_options[1 if len(pill_options) > 1 else 0])
+                idx2 = pill_options.index(m2_name) if m2_name in pill_options else (1 if len(pill_options) > 1 else 0)
+                sel_m2 = st.selectbox("Model B", options=pill_options, index=idx2, label_visibility="collapsed", key="cmp_pill_m2")
+            with c_tog:
+                compare_mode = st.toggle("⚡ Compare", value=True, key="prompt_compare_toggle")
+                st.session_state.compare_mode = compare_mode
+            st.session_state.selected_llm_models = [LLM_PILL_TO_ID[sel_m1], LLM_PILL_TO_ID[sel_m2]]
+        else:
+            c_plus, c_model, c_tog = st.columns([0.05, 0.55, 0.4], vertical_alignment="center")
+            with c_plus:
+                st.markdown('<div class="gemini-plus-btn" title="Add / Upload document in sidebar">+</div>', unsafe_allow_html=True)
+            with c_model:
+                cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
+                cur_name = LLM_PILL_NAMES.get(cur_id, pill_options[0])
+                cur_idx = pill_options.index(cur_name) if cur_name in pill_options else 0
+                sel_m = st.selectbox("Model", options=pill_options, index=cur_idx, label_visibility="collapsed", key="prompt_model_single")
+                st.session_state.selected_llm_models = [LLM_PILL_TO_ID[sel_m]]
+            with c_tog:
+                compare_mode = st.toggle("⚡ Compare", value=False, key="prompt_compare_toggle")
+                st.session_state.compare_mode = compare_mode
+
+    models = st.session_state.selected_llm_models
 
 if question and has_doc:
     # Show user message
