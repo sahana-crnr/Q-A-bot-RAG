@@ -385,6 +385,25 @@ st.markdown("""
         border: 1px solid #e5e7eb !important;
         border-radius: 8px !important;
     }
+
+    /* ── Chat Prompt Model Selector Toolbar ── */
+    .prompt-toolbar {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 6px 14px 4px 14px;
+        margin-top: 14px;
+        margin-bottom: 2px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .prompt-toolbar-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 2px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -402,6 +421,16 @@ LLM_DISPLAY = {
 
 # Build LLM option list: Display name → model id
 LLM_OPTIONS = {v[0]: k for k, v in LLM_DISPLAY.items()}
+
+# Rich model names formatted for prompt dropdown
+LLM_FORMATTED_NAMES = {
+    "llama3.2": "✦ LLaMA 3.2 (3B · Fast & efficient)",
+    "mistral":  "✦ Mistral (7B · Best reasoning & accuracy)",
+    "phi3":     "✦ Phi-3 Mini (3.8B · Compact & quick)",
+    "qwen2.5":  "✦ Qwen 2.5 (7B · Multilingual)",
+    "gemma2":   "✦ Gemma 2 (9B · Google)",
+}
+LLM_FORMATTED_TO_ID = {v: k for k, v in LLM_FORMATTED_NAMES.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -497,37 +526,6 @@ with st.sidebar:
             <div class="doc-card-meta">{unit_count} {unit_label} · {s.get('total_chunks', '–')} chunks · {s.get('total_characters', 0):,} characters</div>
         </div>
         """, unsafe_allow_html=True)
-
-    # ── AI Model ─────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-label">AI Model</div>', unsafe_allow_html=True)
-    compare_mode = st.toggle("Compare two models", value=False)
-    st.session_state.compare_mode = compare_mode
-
-    llm_display_names = list(LLM_OPTIONS.keys())
-
-    if compare_mode:
-        selected_labels = st.multiselect(
-            "Pick two models to compare",
-            options=llm_display_names,
-            default=llm_display_names[:2],
-            max_selections=2,
-            label_visibility="collapsed",
-        )
-        if len(selected_labels) != 2:
-            st.warning("Select exactly 2 models to compare.")
-        selected_llm_models = [LLM_OPTIONS[l] for l in selected_labels]
-    else:
-        selected_label = st.selectbox(
-            "Model",
-            options=llm_display_names,
-            index=0,
-            label_visibility="collapsed",
-        )
-        hint = LLM_DISPLAY[LLM_OPTIONS[selected_label]][1]
-        st.caption(f"↳ {hint}")
-        selected_llm_models = [LLM_OPTIONS[selected_label]]
-
-    st.session_state.selected_llm_models = selected_llm_models
 
     # ── Current conversation controls ─────────────────────────────────────────
     if st.session_state.chat_history:
@@ -723,16 +721,61 @@ else:
                         )
             st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
-    # ── Chat input ───────────────────────────────────────────────────────────
-    models = st.session_state.selected_llm_models
-
+    # ── Chat input & Model Selector Bar ───────────────────────────────────────
     # If loaded from history but document not indexed here, show notice
     if st.session_state.vectorstore is None and st.session_state.chat_history:
         st.info(
             f"📂 You're viewing a past conversation for **{st.session_state.current_doc}**. "
-            "To ask new questions, upload and re-analyze the same PDF from the sidebar."
+            "To ask new questions, upload and re-analyze the same document from the sidebar."
         )
     else:
+        # ── Model Selector (Integrated directly with question asking box) ────
+        llm_display_choices = list(LLM_FORMATTED_NAMES.values())
+
+        st.markdown('<div class="prompt-toolbar">', unsafe_allow_html=True)
+        t_col1, t_col2 = st.columns([3, 1])
+
+        with t_col2:
+            compare_mode = st.toggle("⚡ Compare 2 models", value=st.session_state.compare_mode, key="prompt_compare_toggle")
+            st.session_state.compare_mode = compare_mode
+
+        with t_col1:
+            if compare_mode:
+                default_labels = [LLM_FORMATTED_NAMES.get(m, llm_display_choices[0]) for m in st.session_state.selected_llm_models]
+                if len(default_labels) < 2:
+                    default_labels = llm_display_choices[:2]
+                elif len(default_labels) > 2:
+                    default_labels = default_labels[:2]
+
+                selected_labels = st.multiselect(
+                    "Pick 2 models to compare",
+                    options=llm_display_choices,
+                    default=default_labels,
+                    max_selections=2,
+                    label_visibility="collapsed",
+                    placeholder="Choose 2 models to compare side-by-side…",
+                    key="prompt_models_multi",
+                )
+                if len(selected_labels) != 2:
+                    st.caption("⚠️ *Select exactly 2 models to compare.*")
+                st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[l] for l in selected_labels] if selected_labels else [DEFAULT_LLM_MODEL]
+            else:
+                cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
+                cur_fmt = LLM_FORMATTED_NAMES.get(cur_id, llm_display_choices[0])
+                def_idx = llm_display_choices.index(cur_fmt) if cur_fmt in llm_display_choices else 0
+
+                selected_label = st.selectbox(
+                    "Model",
+                    options=llm_display_choices,
+                    index=def_idx,
+                    label_visibility="collapsed",
+                    key="prompt_model_single",
+                )
+                st.session_state.selected_llm_models = [LLM_FORMATTED_TO_ID[selected_label]]
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        models = st.session_state.selected_llm_models
         question = st.chat_input("Ask a question about your document…")
 
         if question:
