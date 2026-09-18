@@ -428,6 +428,10 @@ st.markdown("""
         margin: 0 !important;
         caret-color: #ffffff !important;
         resize: none !important;
+        cursor: text !important;
+        position: relative !important;
+        z-index: 15 !important;
+        pointer-events: auto !important;
     }
     div[data-testid="stChatInput"] textarea::placeholder {
         color: #9aa0a6 !important;
@@ -472,12 +476,24 @@ st.markdown("""
     /* Docked bottom-left toolbar (+ icon, Model pill, Compare) */
     .st-key-chat_dock_toolbar {
         position: absolute !important;
-        bottom: 14px !important;
+        bottom: 12px !important;
         left: 18px !important;
-        z-index: 30 !important;
-        pointer-events: auto !important;
+        height: 32px !important;
+        max-height: 32px !important;
+        z-index: 20 !important;
+        pointer-events: none !important;
         width: auto !important;
         max-width: calc(100% - 75px) !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+    .st-key-chat_dock_toolbar div[data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 32px !important;
+        pointer-events: none !important;
     }
     .st-key-chat_dock_toolbar div[data-testid="stHorizontalBlock"] {
         display: flex !important;
@@ -485,6 +501,8 @@ st.markdown("""
         gap: 8px !important;
         margin: 0 !important;
         padding: 0 !important;
+        height: 32px !important;
+        pointer-events: none !important;
     }
     .st-key-chat_dock_toolbar div[data-testid="column"] {
         width: auto !important;
@@ -492,6 +510,18 @@ st.markdown("""
         min-width: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
+        height: 32px !important;
+        display: flex !important;
+        align-items: center !important;
+        pointer-events: none !important;
+    }
+    /* Only allow clicks on actual buttons, pills and switches */
+    .st-key-chat_dock_toolbar .gemini-plus-btn,
+    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"],
+    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"] *,
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"],
+    .st-key-chat_dock_toolbar div[data-testid="stToggle"] * {
+        pointer-events: auto !important;
     }
 
     /* Plus icon */
@@ -939,10 +969,10 @@ else:
 has_doc = st.session_state.vectorstore is not None
 
 with st.bottom:
-    # 1. First render the chat input (modern dark pill container)
+    # 1. First render the chat input (modern dark pill container, always enabled for typing)
     question = st.chat_input(
-        "Ask a question about your document…" if has_doc else "Upload a document in the sidebar to start asking questions…",
-        disabled=not has_doc,
+        "Ask a question about your document…",
+        disabled=False,
     )
 
     # 2. Docked bottom-left toolbar (+ icon, Model pill, Compare) matching modern AI input style
@@ -984,7 +1014,10 @@ with st.bottom:
 
     models = st.session_state.selected_llm_models
 
-if question and has_doc:
+if question and not has_doc:
+    st.warning("⚠️ **No document active.** Please upload and analyze a document in the sidebar to ask questions!")
+
+elif question and has_doc:
     # Show user message
     st.markdown(f"""
     <div class="chat-user-wrap">
