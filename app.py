@@ -774,26 +774,10 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    # ── Model & Temperature Settings ──────────────────────────────────────────
+    # ── Model Temperature Setting ─────────────────────────────────────────────
     st.markdown("---")
-    st.markdown('<div class="section-label">Model Settings</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Model Temperature</div>', unsafe_allow_html=True)
 
-    model_keys = list(LLM_DISPLAY.keys())
-    cur_m = st.session_state.selected_model if st.session_state.selected_model in model_keys else DEFAULT_LLM_MODEL
-    cur_m_idx = model_keys.index(cur_m)
-
-    sel_model_sb = st.selectbox(
-        "Active Model",
-        options=model_keys,
-        format_func=lambda m: f"✦ {LLM_DISPLAY[m][0]} ({LLM_DISPLAY[m][1]})",
-        index=cur_m_idx,
-        label_visibility="collapsed",
-        key="sidebar_model_select",
-    )
-    st.session_state.selected_model = sel_model_sb
-
-    # Temperature Slider
-    st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
     temp_val = st.slider(
         "Temperature",
         min_value=0.0,
