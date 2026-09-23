@@ -7,10 +7,14 @@ Supports: PDF, Word (.docx), Plain Text (.txt, .md), CSV, Excel (.xlsx, .xls), J
 import io
 import json
 import os
+import re
 import tempfile
 from typing import List
+from urllib.parse import urlparse
 
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -375,6 +379,88 @@ def load_and_split_document(
         return _process_text(uploaded_file, chunk_size, chunk_overlap)
 
 
+def load_and_split_url(url: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Document]:
+    """
+    Fetch a web page, extract main content text, and split into chunks.
+
+    Args:
+        url: Full HTTP or HTTPS web URL.
+        chunk_size: Target characters per chunk.
+        chunk_overlap: Overlap characters between chunks.
+
+    Returns:
+        List of LangChain Document objects with rich metadata.
+    """
+    url = url.strip()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    resp = requests.get(url, headers=headers, timeout=15)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Extract title
+    title = ""
+    if soup.title and soup.title.string:
+        title = soup.title.string.strip()
+    if not title:
+        parsed = urlparse(url)
+        title = parsed.netloc + (parsed.path if parsed.path and parsed.path != "/" else "")
+
+    # Clean out non-content elements
+    for tag in soup(["script", "style", "nav", "header", "footer", "aside", "noscript", "svg", "iframe", "form"]):
+        tag.decompose()
+
+    # Extract text from main container or body
+    main_elem = soup.find("main") or soup.find("article") or soup.find("div", {"id": "content"}) or soup.find("div", {"class": "content"}) or soup.body
+    if main_elem:
+        raw_text = main_elem.get_text(separator="\n", strip=True)
+    else:
+        raw_text = soup.get_text(separator="\n", strip=True)
+
+    # Clean excessive blank lines
+    cleaned_lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    content_text = "\n\n".join(cleaned_lines)
+
+    if not content_text:
+        raise ValueError(f"Could not extract readable text from {url}")
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+
+    raw_chunks = splitter.split_text(content_text)
+    documents = []
+    display_title = title[:60] if len(title) > 60 else title
+
+    for idx, chunk_text in enumerate(raw_chunks, 1):
+        doc = Document(
+            page_content=f"Web Source: {display_title}\nURL: {url}\n\n{chunk_text}",
+            metadata={
+                "source_filename": display_title,
+                "source_url": url,
+                "file_type": "web",
+                "page": idx,
+                "location": f"Section {idx}",
+                "title": display_title,
+            },
+        )
+        documents.append(doc)
+
+    return documents
+
+
 # Alias for backward compatibility
 def load_and_split_pdf(uploaded_file, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Document]:
     """Backward-compatible alias for load_and_split_document."""
@@ -389,6 +475,7 @@ def get_document_stats(chunks: List[Document]) -> dict:
     locations = set(chunk.metadata.get("location", "") for chunk in chunks)
     file_type = chunks[0].metadata.get("file_type", "document") if chunks else "document"
     total_chars = sum(len(chunk.page_content) for chunk in chunks)
+    source_url = chunks[0].metadata.get("source_url", "") if chunks else ""
 
     unit_mapping = {
         "pdf": "Pages",
@@ -397,6 +484,7 @@ def get_document_stats(chunks: List[Document]) -> dict:
         "csv": "Row Blocks",
         "excel": "Sheets/Blocks",
         "json": "Item Blocks",
+        "web": "Web Sections",
     }
     unit_label = unit_mapping.get(file_type, "Sections")
 
@@ -407,4 +495,6 @@ def get_document_stats(chunks: List[Document]) -> dict:
         "file_type": file_type.upper(),
         "total_characters": total_chars,
         "avg_chunk_size": total_chars // len(chunks) if chunks else 0,
+        "source_url": source_url,
     }
+

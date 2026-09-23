@@ -7,6 +7,7 @@ import os
 import streamlit as st
 from rag.document_processor import (
     load_and_split_document,
+    load_and_split_url,
     load_and_split_pdf,
     get_document_stats,
     SUPPORTED_EXTENSIONS,
@@ -223,14 +224,14 @@ st.markdown("""
         margin-left: 36px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .faster-tag {
-        background: #d1fae5;
-        color: #065f46;
+    .temp-tag {
+        background: #fef3c7;
+        color: #92400e;
         font-size: 0.68rem;
         font-weight: 600;
         padding: 1px 7px;
         border-radius: 20px;
-        margin-left: 4px;
+        margin-left: 6px;
     }
 
     /* ── Typing indicator ── */
@@ -279,25 +280,6 @@ st.markdown("""
     @keyframes bounce {
         0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
         40%            { transform: scale(1.1); opacity: 1;   }
-    }
-
-    /* ── Compare column header ── */
-    .compare-col-head {
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 10px 14px;
-        margin-bottom: 12px;
-    }
-    .compare-col-model {
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: #111827;
-    }
-    .compare-col-speed {
-        font-size: 0.75rem;
-        color: #6b7280;
-        margin-top: 2px;
     }
 
     /* ── Source pills ── */
@@ -515,12 +497,11 @@ st.markdown("""
         align-items: center !important;
         pointer-events: none !important;
     }
-    /* Only allow clicks on actual buttons, pills and switches */
+    /* Only allow clicks on actual buttons and selectbox */
     .st-key-chat_dock_toolbar .gemini-plus-btn,
+    .st-key-chat_dock_toolbar .gemini-temp-pill,
     .st-key-chat_dock_toolbar div[data-testid="stSelectbox"],
-    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"] *,
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"],
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"] * {
+    .st-key-chat_dock_toolbar div[data-testid="stSelectbox"] * {
         pointer-events: auto !important;
     }
 
@@ -582,33 +563,25 @@ st.markdown("""
         height: 15px !important;
     }
 
-    /* VS Tag in compare mode */
-    .gemini-vs-tag {
-        color: #80868b !important;
-        font-size: 0.72rem !important;
-        font-weight: 700 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
-        padding: 0 2px !important;
-    }
-
-    /* Compare Toggle */
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"] {
-        margin: 0 !important;
-        padding: 0 4px !important;
-    }
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"] label {
-        margin: 0 !important;
-        cursor: pointer !important;
-    }
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"] [data-testid="stMarkdownContainer"] p {
+    /* Temperature pill in prompt toolbar */
+    .gemini-temp-pill {
         color: #9aa0a6 !important;
-        font-size: 0.78rem !important;
+        font-size: 0.76rem !important;
         font-weight: 500 !important;
+        background: #282a2c !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 16px !important;
+        height: 28px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        padding: 0 9px !important;
+        user-select: none !important;
         white-space: nowrap !important;
+        transition: color 0.15s ease, border-color 0.15s ease !important;
     }
-    .st-key-chat_dock_toolbar div[data-testid="stToggle"]:hover [data-testid="stMarkdownContainer"] p {
+    .gemini-temp-pill:hover {
         color: #e3e3e3 !important;
+        border-color: #5f6368 !important;
     }
 
     /* Dropdown Popover Menu (BaseWeb menu) */
@@ -679,8 +652,9 @@ for key, default in {
     "current_doc": None,
     "doc_stats": None,
     "selected_embed_model": DEFAULT_EMBED_MODEL,
-    "selected_llm_models": [DEFAULT_LLM_MODEL],
-    "compare_mode": False,
+    "selected_model": DEFAULT_LLM_MODEL,
+    "temperature": 0.20,
+    "source_type": "file",
     "session_id": None,       # Tracks the current save file
 }.items():
     if key not in st.session_state:
@@ -696,73 +670,146 @@ with st.sidebar:
     <div class="app-header">
         <div class="app-logo">✦</div>
         <div>
-            <div class="app-title">Clarity</div>
-            <div class="app-subtitle">Document Intelligence</div>
+            <div class="app-title">Clarity RAG</div>
+            <div class="app-subtitle">Document & Web Intelligence</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Upload ───────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-label">Your Document</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Drop a file here",
-        type=SUPPORTED_EXTENSIONS,
-        help="Supported formats: PDF, Word (.docx), Excel (.xlsx, .xls), CSV, Text (.txt, .md), JSON",
+    # ── Source Selector ──────────────────────────────────────────────────────
+    st.markdown('<div class="section-label">Knowledge Source</div>', unsafe_allow_html=True)
+    source_choice = st.radio(
+        "Source Mode",
+        options=["📄 Document File", "🌐 Web URL"],
+        index=0 if st.session_state.get("source_type", "file") == "file" else 1,
+        horizontal=True,
         label_visibility="collapsed",
     )
-    st.caption("Supports **PDF, Word, Excel, CSV, Text, JSON**")
+    st.session_state.source_type = "file" if "Document" in source_choice else "url"
 
-    # ── Process button ────────────────────────────────────────────────────────
-    # Embedding model is fixed to nomic-embed-text (best default, no config needed)
     selected_embed_model = DEFAULT_EMBED_MODEL
 
-    if uploaded_file:
-        is_new = (
-            st.session_state.current_doc != uploaded_file.name
+    if st.session_state.source_type == "file":
+        uploaded_file = st.file_uploader(
+            "Drop a file here",
+            type=SUPPORTED_EXTENSIONS,
+            help="Supported formats: PDF, Word (.docx), Excel (.xlsx, .xls), CSV, Text (.txt, .md), JSON",
+            label_visibility="collapsed",
         )
-        if is_new:
-            if st.button("Analyze Document →", type="primary", use_container_width=True):
-                collection_name = get_collection_name(uploaded_file.name, selected_embed_model)
-                with st.spinner("Reading & parsing document…"):
-                    chunks = load_and_split_document(uploaded_file)
-                    stats  = get_document_stats(chunks)
+        st.caption("Supports **PDF, Word, Excel, CSV, Text, JSON**")
 
-                if collection_exists(collection_name):
-                    with st.spinner("Loading…"):
-                        vectorstore = load_vectorstore(collection_name, selected_embed_model)
-                else:
-                    with st.spinner("Indexing document… (first time only)"):
-                        vectorstore = create_vectorstore(chunks, collection_name, selected_embed_model)
+        if uploaded_file:
+            is_new = (st.session_state.current_doc != uploaded_file.name)
+            if is_new:
+                if st.button("Analyze Document →", type="primary", use_container_width=True):
+                    collection_name = get_collection_name(uploaded_file.name, selected_embed_model)
+                    with st.spinner("Reading & parsing document…"):
+                        chunks = load_and_split_document(uploaded_file)
+                        stats  = get_document_stats(chunks)
 
-                st.session_state.vectorstore         = vectorstore
-                st.session_state.current_doc         = uploaded_file.name
-                st.session_state.selected_embed_model = selected_embed_model
-                st.session_state.doc_stats           = stats
-                st.session_state.chat_history        = []
-                st.rerun()
+                    if collection_exists(collection_name):
+                        with st.spinner("Loading index…"):
+                            vectorstore = load_vectorstore(collection_name, selected_embed_model)
+                    else:
+                        with st.spinner("Indexing document… (first time only)"):
+                            vectorstore = create_vectorstore(chunks, collection_name, selected_embed_model)
 
-    # ── Document info card ────────────────────────────────────────────────────
+                    st.session_state.vectorstore          = vectorstore
+                    st.session_state.current_doc          = uploaded_file.name
+                    st.session_state.selected_embed_model = selected_embed_model
+                    st.session_state.doc_stats            = stats
+                    st.session_state.chat_history         = []
+                    st.session_state.session_id           = None
+                    st.rerun()
+
+    else:
+        web_url = st.text_input(
+            "Web URL",
+            placeholder="https://en.wikipedia.org/wiki/... or article URL",
+            label_visibility="collapsed",
+        )
+        st.caption("Enter any article, Wikipedia, blog, or documentation URL")
+
+        if web_url:
+            clean_url = web_url.strip()
+            if not clean_url.startswith("http"):
+                clean_url = "https://" + clean_url
+            if st.button("Fetch & Index Webpage →", type="primary", use_container_width=True):
+                slug = clean_url.replace("https://", "").replace("http://", "").replace("/", "_").replace(".", "_")[:28]
+                collection_name = get_collection_name(f"web_{slug}", selected_embed_model)
+                with st.spinner("Fetching webpage & extracting content…"):
+                    try:
+                        chunks = load_and_split_url(clean_url)
+                        stats  = get_document_stats(chunks)
+
+                        if collection_exists(collection_name):
+                            with st.spinner("Loading index…"):
+                                vectorstore = load_vectorstore(collection_name, selected_embed_model)
+                        else:
+                            with st.spinner("Indexing web content…"):
+                                vectorstore = create_vectorstore(chunks, collection_name, selected_embed_model)
+
+                        st.session_state.vectorstore          = vectorstore
+                        st.session_state.current_doc          = stats.get("source_url", clean_url)
+                        st.session_state.selected_embed_model = selected_embed_model
+                        st.session_state.doc_stats            = stats
+                        st.session_state.chat_history         = []
+                        st.session_state.session_id           = None
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Failed to fetch webpage: {ex}")
+
+    # ── Active source card ────────────────────────────────────────────────────
     if st.session_state.current_doc:
         s = st.session_state.doc_stats or {}
-        ext = os.path.splitext(st.session_state.current_doc)[1].lower()
-        icon = {
-            ".pdf": "📕",
-            ".docx": "📘",
-            ".txt": "📄",
-            ".md": "📝",
-            ".csv": "📊",
-            ".xlsx": "📈",
-            ".xls": "📈",
-            ".json": "🗂️",
-        }.get(ext, "📄")
+        is_web = s.get("file_type") == "WEB" or "http" in str(st.session_state.current_doc)
+        icon = "🌐" if is_web else "📄"
         unit_label = s.get("unit_label", "Sections")
-        unit_count = s.get("total_units", s.get("total_pages", "–"))
+        unit_count = s.get("total_units", "–")
+        doc_display = st.session_state.current_doc
         st.markdown(f"""
         <div class="doc-card">
-            <div class="doc-card-name">{icon} {st.session_state.current_doc}</div>
-            <div class="doc-card-meta">{unit_count} {unit_label} · {s.get('total_chunks', '–')} chunks · {s.get('total_characters', 0):,} characters</div>
+            <div class="doc-card-name">{icon} {doc_display}</div>
+            <div class="doc-card-meta">{unit_count} {unit_label} · {s.get('total_chunks', '–')} chunks · {s.get('total_characters', 0):,} chars</div>
         </div>
         """, unsafe_allow_html=True)
+
+    # ── Model & Temperature Settings ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<div class="section-label">Model Settings</div>', unsafe_allow_html=True)
+
+    model_keys = list(LLM_DISPLAY.keys())
+    cur_m = st.session_state.selected_model if st.session_state.selected_model in model_keys else DEFAULT_LLM_MODEL
+    cur_m_idx = model_keys.index(cur_m)
+
+    sel_model_sb = st.selectbox(
+        "Active Model",
+        options=model_keys,
+        format_func=lambda m: f"✦ {LLM_DISPLAY[m][0]} ({LLM_DISPLAY[m][1]})",
+        index=cur_m_idx,
+        label_visibility="collapsed",
+        key="sidebar_model_select",
+    )
+    st.session_state.selected_model = sel_model_sb
+
+    # Temperature Slider
+    st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
+    temp_val = st.slider(
+        "Temperature",
+        min_value=0.0,
+        max_value=1.0,
+        value=float(st.session_state.temperature),
+        step=0.05,
+        help="Lower values (0.0 - 0.2) produce factual, grounded responses. Higher values (0.7+) make output more creative.",
+    )
+    st.session_state.temperature = temp_val
+
+    if temp_val <= 0.2:
+        st.caption("🎯 *Factual & Grounded (Recommended for RAG)*")
+    elif temp_val <= 0.6:
+        st.caption("⚖️ *Balanced Precision & Fluency*")
+    else:
+        st.caption("🎨 *Creative & Exploratory*")
 
     # ── Current conversation controls ─────────────────────────────────────────
     if st.session_state.chat_history:
@@ -864,15 +911,20 @@ with st.sidebar:
 # MAIN AREA
 # ===========================================================================
 
-# ── Helper: render sources as pills ─────────────────────────────────────────
+# ── Helper: render sources as expandable citations ──────────────────────────
 def render_sources(sources):
     if not sources:
         return
-    pills = []
-    for s in sources:
-        loc = s.get("location") or f"Page {s.get('page', 1)}"
-        pills.append(f'<span class="source-pill">📌 {loc}</span>')
-    st.markdown(f'<div style="margin-top:8px">{"".join(pills)}</div>', unsafe_allow_html=True)
+    with st.expander(f"📌 View {len(sources)} Evidence Source{'s' if len(sources) > 1 else ''}", expanded=False):
+        for idx, s in enumerate(sources, 1):
+            loc = s.get("location") or f"Section {s.get('page', idx)}"
+            doc_name = s.get("filename") or s.get("source_filename") or s.get("title") or "Source"
+            url = s.get("source_url")
+            link_html = f' &nbsp;·&nbsp; <a href="{url}" target="_blank" style="color:#2563eb; text-decoration:underline;">Open Webpage ↗</a>' if url else ""
+            st.markdown(f"**[{idx}] {doc_name}** (`{loc}`){link_html}")
+            snippet = s.get("snippet", "").strip()
+            if snippet:
+                st.caption(f"_{snippet}_")
 
 
 # ── Helper: typing indicator ─────────────────────────────────────────────────
@@ -892,13 +944,13 @@ def show_typing_indicator(placeholder, label: str = ""):
 
 
 # ── Helper: render one AI response block ────────────────────────────────────
-def render_ai_response(model_id, answer, elapsed, sources, faster=False):
+def render_ai_response(model_id, answer, elapsed, sources, temperature=None):
     label = LLM_DISPLAY.get(model_id, (model_id,))[0]
-    faster_tag = '<span class="faster-tag">Faster</span>' if faster else ""
+    temp_badge = f'<span class="temp-tag">🌡️ {temperature:.2f}</span>' if temperature is not None else ""
     st.markdown(f"""
     <div class="chat-ai-header">
         <div class="chat-ai-avatar">✦</div>
-        <span class="chat-ai-name">{label}</span>{faster_tag}
+        <span class="chat-ai-name">{label}</span>{temp_badge}
         <span class="chat-ai-time">⏱ {elapsed}s</span>
     </div>
     """, unsafe_allow_html=True)
@@ -906,34 +958,32 @@ def render_ai_response(model_id, answer, elapsed, sources, faster=False):
     render_sources(sources)
 
 
-# ── No document loaded → Welcome screen ─────────────────────────────────────
 # ── Welcome screen or Chat History ──────────────────────────────────────────
 if st.session_state.vectorstore is None and not st.session_state.chat_history:
     st.markdown("""
     <div class="welcome-card">
         <div class="welcome-icon">✦</div>
-        <div class="welcome-title">Ask anything across any document</div>
+        <div class="welcome-title">Ask anything across documents or the web</div>
         <div class="welcome-sub">
-            Upload any <b>PDF, Word (.docx), Excel, CSV, Text, or JSON</b> file on the left.
-            Ask questions in plain English and get grounded answers with exact source citations.
+            Upload a file (<b>PDF, Word, Excel, CSV, Text, JSON</b>) or enter any <b>Web URL</b> in the sidebar.
+            Ask questions in plain English with grounded, verifiable answers.
         </div>
         <div class="step-list">
-            <div class="step-item"><span class="step-num">1</span> Upload document or dataset</div>
-            <div class="step-item"><span class="step-num">2</span> Click "Analyze Document"</div>
-            <div class="step-item"><span class="step-num">3</span> Ask questions & compare models</div>
+            <div class="step-item"><span class="step-num">1</span> Choose Document or Web URL source</div>
+            <div class="step-item"><span class="step-num">2</span> Index knowledge & tune temperature</div>
+            <div class="step-item"><span class="step-num">3</span> Ask questions with cited evidence</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("**Test across different types of data & domains:**")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.info('📄 **Formal SOW / Contracts:**\n*"What are the project deliverables & payment milestones?"*')
+        st.info('📄 **Documents & Contracts:**\n*"What are the deliverables and deadlines?"*')
     with c2:
-        st.info('📊 **Spreadsheets / CSV Catalogs:**\n*"Which shoe model costs less than $100 and is in stock?"*')
+        st.info('🌐 **Web Pages & Articles:**\n*"Summarize the main breakthroughs described."*')
     with c3:
-        st.info('🍽️ **Menus & Policies:**\n*"What vegan dishes are listed, and what is the return policy?"*')
+        st.info('📊 **Spreadsheets & Data:**\n*"Filter and summarize items by category."*')
 
 else:
     # ── Render chat history ──────────────────────────────────────────────────
@@ -945,24 +995,26 @@ else:
             </div>
             """, unsafe_allow_html=True)
         else:
-            responses = msg.get("responses", [])
-            if len(responses) == 1:
-                r = responses[0]
-                render_ai_response(r["model_id"], r["answer"], r["elapsed"], r.get("sources", []))
-            elif len(responses) == 2:
-                col1, col2 = st.columns(2)
-                for col, r in zip([col1, col2], responses):
-                    with col:
-                        render_ai_response(
-                            r["model_id"], r["answer"], r["elapsed"],
-                            r.get("sources", []), faster=r.get("is_faster", False)
-                        )
+            if "responses" in msg:
+                for r in msg["responses"]:
+                    render_ai_response(
+                        r["model_id"], r["answer"], r["elapsed"],
+                        r.get("sources", []), temperature=r.get("temperature")
+                    )
+            else:
+                render_ai_response(
+                    msg.get("model_id", st.session_state.selected_model),
+                    msg.get("answer", ""),
+                    msg.get("elapsed", 0),
+                    msg.get("sources", []),
+                    temperature=msg.get("temperature", st.session_state.temperature),
+                )
             st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
     if st.session_state.vectorstore is None and st.session_state.chat_history:
         st.info(
             f"📂 You're viewing a past conversation for **{st.session_state.current_doc}**. "
-            "To ask new questions, upload and re-analyze the same document from the sidebar."
+            "To ask new questions, re-index the source from the sidebar."
         )
 
 # ── Bottom Fixed Question Box & Model Selector (ALWAYS VISIBLE) ─────────────
@@ -971,51 +1023,27 @@ has_doc = st.session_state.vectorstore is not None
 with st.bottom:
     # 1. First render the chat input (modern dark pill container, always enabled for typing)
     question = st.chat_input(
-        "Ask a question about your document…",
+        "Ask a question about your source…",
         disabled=False,
     )
 
-    # 2. Docked bottom-left toolbar (+ icon, Model pill, Compare) matching modern AI input style
+    # 2. Docked bottom-left toolbar (+ icon, Model pill, Temperature pill)
     pill_options = list(LLM_PILL_NAMES.values())
     with st.container(key="chat_dock_toolbar"):
-        if st.session_state.compare_mode:
-            c_plus, c_m1, c_vs, c_m2, c_tog = st.columns([0.05, 0.4, 0.05, 0.4, 0.3], vertical_alignment="center")
-            with c_plus:
-                st.markdown('<div class="gemini-plus-btn" title="Add / Upload document in sidebar">+</div>', unsafe_allow_html=True)
-            with c_m1:
-                cur_m1 = st.session_state.selected_llm_models[0] if len(st.session_state.selected_llm_models) > 0 else "llama3.2"
-                m1_name = LLM_PILL_NAMES.get(cur_m1, pill_options[0])
-                idx1 = pill_options.index(m1_name) if m1_name in pill_options else 0
-                sel_m1 = st.selectbox("Model A", options=pill_options, index=idx1, label_visibility="collapsed", key="cmp_pill_m1")
-            with c_vs:
-                st.markdown('<span class="gemini-vs-tag">vs</span>', unsafe_allow_html=True)
-            with c_m2:
-                cur_m2 = st.session_state.selected_llm_models[1] if len(st.session_state.selected_llm_models) > 1 else ("mistral" if cur_m1 != "mistral" else "llama3.2")
-                m2_name = LLM_PILL_NAMES.get(cur_m2, pill_options[1 if len(pill_options) > 1 else 0])
-                idx2 = pill_options.index(m2_name) if m2_name in pill_options else (1 if len(pill_options) > 1 else 0)
-                sel_m2 = st.selectbox("Model B", options=pill_options, index=idx2, label_visibility="collapsed", key="cmp_pill_m2")
-            with c_tog:
-                compare_mode = st.toggle("⚡ Compare", value=True, key="prompt_compare_toggle")
-                st.session_state.compare_mode = compare_mode
-            st.session_state.selected_llm_models = [LLM_PILL_TO_ID[sel_m1], LLM_PILL_TO_ID[sel_m2]]
-        else:
-            c_plus, c_model, c_tog = st.columns([0.05, 0.55, 0.4], vertical_alignment="center")
-            with c_plus:
-                st.markdown('<div class="gemini-plus-btn" title="Add / Upload document in sidebar">+</div>', unsafe_allow_html=True)
-            with c_model:
-                cur_id = st.session_state.selected_llm_models[0] if st.session_state.selected_llm_models else DEFAULT_LLM_MODEL
-                cur_name = LLM_PILL_NAMES.get(cur_id, pill_options[0])
-                cur_idx = pill_options.index(cur_name) if cur_name in pill_options else 0
-                sel_m = st.selectbox("Model", options=pill_options, index=cur_idx, label_visibility="collapsed", key="prompt_model_single")
-                st.session_state.selected_llm_models = [LLM_PILL_TO_ID[sel_m]]
-            with c_tog:
-                compare_mode = st.toggle("⚡ Compare", value=False, key="prompt_compare_toggle")
-                st.session_state.compare_mode = compare_mode
-
-    models = st.session_state.selected_llm_models
+        c_plus, c_model, c_temp = st.columns([0.06, 0.60, 0.34], vertical_alignment="center")
+        with c_plus:
+            st.markdown('<div class="gemini-plus-btn" title="Add document or web source in sidebar">+</div>', unsafe_allow_html=True)
+        with c_model:
+            cur_id = st.session_state.selected_model
+            cur_name = LLM_PILL_NAMES.get(cur_id, pill_options[0])
+            cur_idx = pill_options.index(cur_name) if cur_name in pill_options else 0
+            sel_m = st.selectbox("Model", options=pill_options, index=cur_idx, label_visibility="collapsed", key="prompt_model_single")
+            st.session_state.selected_model = LLM_PILL_TO_ID[sel_m]
+        with c_temp:
+            st.markdown(f'<div class="gemini-temp-pill" title="Temperature setting (adjust in sidebar)">🌡️ {st.session_state.temperature:.2f}</div>', unsafe_allow_html=True)
 
 if question and not has_doc:
-    st.warning("⚠️ **No document active.** Please upload and analyze a document in the sidebar to ask questions!")
+    st.warning("⚠️ **No knowledge source active.** Please upload a document or enter a web URL in the sidebar to ask questions!")
 
 elif question and has_doc:
     # Show user message
@@ -1026,95 +1054,36 @@ elif question and has_doc:
     """, unsafe_allow_html=True)
     st.session_state.chat_history.append({"role": "user", "content": question})
 
-    vs      = st.session_state.vectorstore
-    sources = get_sources(vs, question)
+    vs       = st.session_state.vectorstore
+    sources  = get_sources(vs, question)
+    model_id = st.session_state.selected_model
+    model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
 
-    if not st.session_state.compare_mode or len(models) == 1:
-        # ── Single model ─────────────────────────────────────────────
-        model_id    = models[0]
-        model_label = LLM_DISPLAY.get(model_id, (model_id,))[0]
+    # Show typing indicator while model generates
+    typing_placeholder = st.empty()
+    show_typing_indicator(typing_placeholder, model_label)
 
-        # Show typing indicator while model generates
-        typing_placeholder = st.empty()
-        show_typing_indicator(typing_placeholder, model_label)
+    try:
+        chain  = build_rag_chain(vs, model_id, temperature=float(st.session_state.temperature))
+        result = ask_with_timing(chain, question)
 
-        try:
-            chain  = build_rag_chain(vs, model_id)
-            result = ask_with_timing(chain, question)
+        # Clear typing indicator, render actual answer
+        typing_placeholder.empty()
+        render_ai_response(
+            model_id,
+            result["answer"],
+            result["elapsed_seconds"],
+            sources,
+            temperature=st.session_state.temperature,
+        )
 
-            # Clear typing indicator, render actual answer
-            typing_placeholder.empty()
-            render_ai_response(model_id, result["answer"], result["elapsed_seconds"], sources)
-
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "responses": [{
-                    "model_id": model_id,
-                    "answer":   result["answer"],
-                    "elapsed":  result["elapsed_seconds"],
-                    "sources":  sources,
-                }],
-            })
-            # Auto-save conversation to disk
-            st.session_state.session_id = save_session(
-                st.session_state.current_doc,
-                st.session_state.chat_history,
-                st.session_state.session_id,
-            )
-        except Exception as e:
-            typing_placeholder.empty()
-            st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded.\n\n`{e}`")
-
-    else:
-        # ── Side-by-side comparison ───────────────────────────────────
-        # Step 1: Collect both results (sequential, with typing indicator)
-        results      = []
-        model_labels = [LLM_DISPLAY.get(m, (m,))[0] for m in models]
-        typing_ph    = st.empty()
-
-        for i, model_id in enumerate(models):
-            label = model_labels[i]
-            show_typing_indicator(
-                typing_ph,
-                f"{label}  ({i+1} of {len(models)})"
-            )
-            try:
-                chain  = build_rag_chain(vs, model_id)
-                result = ask_with_timing(chain, question)
-                results.append({
-                    "model_id": model_id,
-                    "answer":   result["answer"],
-                    "elapsed":  result["elapsed_seconds"],
-                    "sources":  sources,
-                })
-            except Exception as e:
-                results.append({
-                    "model_id": model_id,
-                    "answer":   f"⚠️ Error: Make sure Ollama is running and **{label}** is downloaded (`ollama pull {model_id}`).\n\n`{e}`",
-                    "elapsed":  0,
-                    "sources":  [],
-                })
-
-        typing_ph.empty()  # Clear the typing indicator
-
-        # Step 2: Mark the faster model
-        if len(results) == 2 and results[0]["elapsed"] > 0 and results[1]["elapsed"] > 0:
-            idx = 0 if results[0]["elapsed"] <= results[1]["elapsed"] else 1
-            results[idx]["is_faster"] = True
-
-        # Step 3: Render both results side by side cleanly
-        col1, col2 = st.columns(2)
-        for col, r in zip([col1, col2], results):
-            with col:
-                render_ai_response(
-                    r["model_id"], r["answer"], r["elapsed"],
-                    r.get("sources", []), faster=r.get("is_faster", False)
-                )
-
-        # Save to chat history
         st.session_state.chat_history.append({
             "role": "assistant",
-            "responses": results,
+            "model_id": model_id,
+            "answer": result["answer"],
+            "elapsed": result["elapsed_seconds"],
+            "temperature": st.session_state.temperature,
+            "sources": sources,
         })
         # Auto-save conversation to disk
         st.session_state.session_id = save_session(
@@ -1122,3 +1091,6 @@ elif question and has_doc:
             st.session_state.chat_history,
             st.session_state.session_id,
         )
+    except Exception as e:
+        typing_placeholder.empty()
+        st.error(f"Something went wrong. Make sure Ollama is running and the model is downloaded (`ollama pull {model_id}`).\n\n`{e}`")

@@ -74,18 +74,19 @@ def format_docs(docs):
 # ---------------------------------------------------------------------------
 # Build the RAG chain (dynamic model)
 # ---------------------------------------------------------------------------
-def build_rag_chain(vectorstore: Chroma, llm_model: str = DEFAULT_LLM_MODEL):
+def build_rag_chain(vectorstore: Chroma, llm_model: str = DEFAULT_LLM_MODEL, temperature: float = 0.2):
     """
-    Build a RAG chain from a vectorstore with a specific LLM model.
+    Build a RAG chain from a vectorstore with a specific LLM model and temperature.
 
     Args:
         vectorstore: ChromaDB vectorstore instance.
         llm_model: Ollama model name (e.g. "llama3.2", "mistral", "gemma2").
+        temperature: Generation temperature (0.0 to 1.0).
 
     Returns:
         A callable LCEL chain.
     """
-    llm = ChatOllama(model=llm_model, temperature=0.1)
+    llm = ChatOllama(model=llm_model, temperature=temperature)
     retriever = vectorstore.as_retriever(search_kwargs={"k": TOP_K})
 
     chain = (
@@ -136,7 +137,8 @@ def get_sources(vectorstore: Chroma, query: str) -> list:
             sources.append({
                 "page": page,
                 "location": location,
-                "snippet": doc.page_content[:160].strip() + "...",
+                "snippet": doc.page_content[:200].strip() + "...",
                 "filename": doc.metadata.get("source_filename", "document"),
+                "source_url": doc.metadata.get("source_url"),
             })
     return sources
